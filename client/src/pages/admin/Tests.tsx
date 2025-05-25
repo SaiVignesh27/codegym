@@ -697,7 +697,7 @@ export default function Tests() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="">None (General test)</SelectItem>
+                              <SelectItem value="none">None (General test)</SelectItem>
                               {isLoadingClasses ? (
                                 <div className="flex justify-center py-2">
                                   <Loader2 className="h-4 w-4 animate-spin" />

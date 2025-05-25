@@ -973,7 +973,8 @@ export default function Assignments() {
                                         <SelectItem value="code">
                                           <div className="flex items-center">
                                             <Code className="h-4 w-4 mr-2" />
-                                            <span>Coding Question</span>
+                                            ```python
+<span>Coding Question</span>
                                           </div>
                                         </SelectItem>
                                       </SelectContent>
