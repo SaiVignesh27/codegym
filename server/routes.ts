@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import bcrypt from "bcrypt";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Test API endpoint
@@ -29,8 +30,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: 'Access denied. Not an admin account.' });
       }
       
-      // Verify password (this would typically use bcrypt.compare)
-      const isValidPassword = user.password === password; // In a real app, use bcrypt.compare
+      // Verify password using bcrypt
+      const isValidPassword = await bcrypt.compare(password, user.password);
       
       if (!isValidPassword) {
         return res.status(401).json({ error: 'Invalid credentials' });
@@ -75,8 +76,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: 'Access denied. Not a student account.' });
       }
       
-      // Verify password (this would typically use bcrypt.compare)
-      const isValidPassword = user.password === password; // In a real app, use bcrypt.compare
+      // Verify password using bcrypt
+      const isValidPassword = await bcrypt.compare(password, user.password);
       
       if (!isValidPassword) {
         return res.status(401).json({ error: 'Invalid credentials' });
