@@ -29,6 +29,10 @@ import StudentDailyTests from "@/pages/student/DailyTests";
 import StudentAssignments from "@/pages/student/Assignments";
 import StudentLeaderboard from "@/pages/student/Leaderboard";
 import StudentProfile from "@/pages/student/Profile";
+import ClassView from "@/pages/student/ClassView";
+import TestView from "@/pages/student/TestView";
+import TestResults from "@/pages/student/TestResults";
+import AssignmentView from "@/pages/student/AssignmentView";
 
 // Logout handler
 import { useEffect } from "react";
@@ -63,12 +67,12 @@ function Router() {
       <Route path="/student/dashboard" component={StudentDashboard} />
       <Route path="/student/courses" component={StudentCourses} />
       <Route path="/student/courses/:id" component={CourseDetail} />
-<Route path="/student/classes/:id" component={() => import('./pages/student/ClassView')} />
+<Route path="/student/classes/:id" component={ClassView} />
       <Route path="/student/daily-tests" component={StudentDailyTests} />
-      <Route path="/student/tests/:id" component={() => import('./pages/student/TestView')} />
-<Route path="/student/tests/:id/results" component={() => import('./pages/student/TestResults')} />
-<Route path="/student/assignments/:id" component={() => import('./pages/student/AssignmentView')} />
-<Route path="/student/assignments/:id/results" component={() => import('./pages/student/AssignmentResults')} />
+      <Route path="/student/tests/:id" component={TestView} />
+      <Route path="/student/tests/:id/results" component={TestResults} />
+      <Route path="/student/assignments/:id" component={AssignmentView} />
+      <Route path="/student/assignments/:id/results" component={TestResults} />
       <Route path="/student/assignments" component={StudentAssignments} />
       <Route path="/student/leaderboard" component={StudentLeaderboard} />
       <Route path="/student/profile" component={StudentProfile} />

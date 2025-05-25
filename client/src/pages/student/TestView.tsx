@@ -1,10 +1,10 @@
 
 import React, { useState } from 'react';
-import { useParams, useLocation } from 'wouter';
+import { useParams, Link } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import StudentLayout from '@/components/layout/StudentLayout';
-import { Test, Question } from '@shared/schema';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Test } from '@shared/schema';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
@@ -12,7 +12,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Loader2, ArrowLeft, Timer, AlertTriangle } from 'lucide-react';
 
 export default function TestView() {
-  const [, setLocation] = useLocation();
   const { id } = useParams();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
@@ -45,14 +44,12 @@ export default function TestView() {
     return () => clearInterval(timer);
   }, [timeLeft]);
 
-  // Format time remaining
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Submit test mutation
   const submitTest = useMutation({
     mutationFn: async () => {
       const response = await fetch(`/api/student/tests/${id}/submit`, {
@@ -98,7 +95,7 @@ export default function TestView() {
             The test you're looking for doesn't exist or you don't have access to it.
           </p>
           <Button asChild>
-            <Link href="/student/tests">Back to Tests</Link>
+            <Link href="/student/daily-tests">Back to Tests</Link>
           </Button>
         </div>
       </StudentLayout>
@@ -111,8 +108,8 @@ export default function TestView() {
         <div className="flex items-center justify-between">
           <div>
             <Button variant="outline" asChild className="mb-4">
-              <Link href={`/student/courses/${test.courseId}`}>
-                <ArrowLeft className="h-4 w-4 mr-2" /> Back to Course
+              <Link href="/student/daily-tests">
+                <ArrowLeft className="h-4 w-4 mr-2" /> Back to Tests
               </Link>
             </Button>
             <h2 className="text-2xl font-bold">{test.title}</h2>
@@ -126,7 +123,7 @@ export default function TestView() {
           )}
         </div>
 
-        {timeLeft !== null && timeLeft < 300 && ( // Show warning when less than 5 minutes remaining
+        {timeLeft !== null && timeLeft < 300 && (
           <Alert variant="warning">
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Time is running out!</AlertTitle>
