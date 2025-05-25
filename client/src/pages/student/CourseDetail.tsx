@@ -246,21 +246,21 @@ export default function CourseDetail() {
                     </div>
 
                     <div>
-                      <h3 className="font-medium mb-2">Instructor</h3>
-                      <div className="flex items-center">
-                        <Avatar className="h-10 w-10 mr-3">
-                          <AvatarFallback className="bg-primary-light text-white">
-                            JD
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium">John Doe</p>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">
-                            Lead Instructor
-                          </p>
+                        <h3 className="font-medium mb-2">Instructor</h3>
+                        <div className="flex items-center">
+                          <Avatar className="h-10 w-10 mr-3">
+                            <AvatarFallback className="bg-primary-light text-white">
+                              {course.instructor?.initials || 'IN'}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium">{course.instructor?.name || 'Instructor Name'}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                              {course.instructor?.title || 'Course Instructor'}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
                   </div>
                 </CardContent>
               </Card>
