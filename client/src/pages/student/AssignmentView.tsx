@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { useParams, Link } from 'wouter';
-import { useQuery } from '@tanstack/react-query';
+import { useParams, Link, useLocation } from 'wouter';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import StudentLayout from '@/components/layout/StudentLayout';
 import { Assignment } from '@shared/schema';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,39 +11,13 @@ import { Loader2, ArrowLeft } from 'lucide-react';
 export default function AssignmentView() {
   const { id } = useParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
 
   const { data: assignment, isLoading } = useQuery<Assignment>({
     queryKey: [`/api/student/assignments/${id}`],
   });
-
-  if (isLoading) {
-    return (
-      <StudentLayout>
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </StudentLayout>
-    );
-  }
-
-  if (!assignment) {
-    return (
-      <StudentLayout>
-        <div className="text-center py-12">
-          <h2 className="text-2xl font-bold mb-2">Assignment Not Found</h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">
-            The assignment you're looking for doesn't exist or you don't have access to it.
-          </p>
-          <Button asChild>
-            <Link href="/student/assignments">Back to Assignments</Link>
-          </Button>
-        </div>
-      </StudentLayout>
-    );
-  }
-
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const submitAssignment = useMutation({
     mutationFn: async () => {
@@ -74,6 +48,32 @@ export default function AssignmentView() {
     }
     setIsSubmitting(false);
   };
+
+  if (isLoading) {
+    return (
+      <StudentLayout>
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </StudentLayout>
+    );
+  }
+
+  if (!assignment) {
+    return (
+      <StudentLayout>
+        <div className="text-center py-12">
+          <h2 className="text-2xl font-bold mb-2">Assignment Not Found</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
+            The assignment you're looking for doesn't exist or you don't have access to it.
+          </p>
+          <Button asChild>
+            <Link href="/student/assignments">Back to Assignments</Link>
+          </Button>
+        </div>
+      </StudentLayout>
+    );
+  }
 
   return (
     <StudentLayout>
