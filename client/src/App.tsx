@@ -24,6 +24,7 @@ import AdminProfile from "@/pages/admin/Profile";
 // Student Pages
 import StudentDashboard from "@/pages/student/Dashboard";
 import StudentCourses from "@/pages/student/MyCourses";
+import CourseDetail from "@/pages/student/CourseDetail";
 import StudentDailyTests from "@/pages/student/DailyTests";
 import StudentAssignments from "@/pages/student/Assignments";
 import StudentLeaderboard from "@/pages/student/Leaderboard";
@@ -61,6 +62,7 @@ function Router() {
       {/* Student Routes */}
       <Route path="/student/dashboard" component={StudentDashboard} />
       <Route path="/student/courses" component={StudentCourses} />
+      <Route path="/student/courses/:id" component={CourseDetail} />
       <Route path="/student/daily-tests" component={StudentDailyTests} />
       <Route path="/student/assignments" component={StudentAssignments} />
       <Route path="/student/leaderboard" component={StudentLeaderboard} />

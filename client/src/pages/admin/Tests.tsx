@@ -378,8 +378,8 @@ export default function Tests() {
                   <FormLabel>Correct Answer</FormLabel>
                   <Select 
                     onValueChange={field.onChange} 
-                    defaultValue={field.value.toString()}
-                    value={field.value.toString()}
+                    defaultValue={field.value?.toString() || "0"}
+                    value={field.value?.toString() || "0"}
                   >
                     <FormControl>
                       <SelectTrigger>
