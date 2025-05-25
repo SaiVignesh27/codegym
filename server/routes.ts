@@ -1021,74 +1021,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/student/leaderboard', async (req, res) => {
     try {
-      // Get results
-      const results = await mongoStorage.listResults();
+      const courseId = req.query.courseId as string;
+      const type = req.query.type as string;
+      const timeRange = req.query.timeRange as string;
 
-      // Group by student and calculate total scores
+      // Get results with filters
+      const results = await mongoStorage.listResults({
+        courseId: courseId !== 'all' ? courseId : undefined,
+      });
+
+      // Filter by time range
+      const now = new Date();
+      const filteredResults = results.filter(result => {
+        const submittedAt = new Date(result.submittedAt);
+        switch (timeRange) {
+          case 'week':
+            return (now.getTime() - submittedAt.getTime()) <= 7 * 24 * 60 * 60 * 1000;
+          case 'month':
+            return (now.getTime() - submittedAt.getTime()) <= 30 * 24 * 60 * 60 * 1000;
+          case 'year':
+            return (now.getTime() - submittedAt.getTime()) <= 365 * 24 * 60 * 60 * 1000;
+          default:
+            return true;
+        }
+      }).filter(result => {
+        if (type === 'test') return result.testId;
+        if (type === 'assignment') return result.assignmentId;
+        return true;
+      });
+
+      // Group by student and calculate scores
       const leaderboardMap = new Map();
 
-      for (const result of results) {
-        if (!leaderboardMap.has(result.studentId)) {
-          const student = await mongoStorage.getUser(result.studentId);
-          leaderboardMap.set(result.studentId, {
-            studentId: result.studentId,
-            studentName: student ? student.name : 'Unknown Student',
-            score: result.score || 0,
-            completedAt: result.submittedAt || new Date()
-          });
-        } else {
-          const entry = leaderboardMap.get(result.studentId);
-          entry.score += (result.score || 0);
-          if (result.submittedAt && (!entry.completedAt || result.submittedAt > entry.completedAt)) {
-            entry.completedAt = result.submittedAt;
-          }
+      for (const result of filteredResults) {
+        const student = await mongoStorage.getUser(result.studentId);
+        if (!student) continue;
+
+        const entry = leaderboardMap.get(result.studentId) || {
+          studentId: result.studentId,
+          studentName: student.name,
+          courseId: result.courseId,
+          testId: result.testId,
+          assignmentId: result.assignmentId,
+          totalTests: 0,
+          totalAssignments: 0,
+          score: 0,
+          completedAt: result.submittedAt
+        };
+
+        if (result.testId) entry.totalTests++;
+        if (result.assignmentId) entry.totalAssignments++;
+        
+        entry.score = Math.round((entry.score + (result.score || 0)) / 
+          (entry.totalTests + entry.totalAssignments));
+
+        if (result.submittedAt > entry.completedAt) {
+          entry.completedAt = result.submittedAt;
         }
+
+        leaderboardMap.set(result.studentId, entry);
       }
 
-      // Create mock leaderboard if no results exist
-      if (leaderboardMap.size === 0) {
-        const leaderboard = [
-          {
-            studentId: '1',
-            studentName: 'Alex Johnson',
-            score: 950,
-            completedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
-          },
-          {
-            studentId: '2',
-            studentName: 'Maria Garcia',
-            score: 920,
-            completedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
-          },
-          {
-            studentId: '3',
-            studentName: 'Student User',
-            score: 880,
-            completedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000)
-          },
-          {
-            studentId: '4',
-            studentName: 'James Wilson',
-            score: 850,
-            completedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000)
-          },
-          {
-            studentId: '5',
-            studentName: 'Sarah Lee',
-            score: 820,
-            completedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
-          }
-        ];
+      // Convert to array and sort
+      const leaderboard = Array.from(leaderboardMap.values())
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10);
 
-        res.json(leaderboard);
-      } else {
-        // Convert map to array, sort by score descending
-        const leaderboard = Array.from(leaderboardMap.values())
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 10); // Top 10
-
-        res.json(leaderboard);
-      }
+      res.json(leaderboard);
     } catch (error) {
       console.error('Error fetching leaderboard:', error);
       res.status(500).json({ error: 'Internal server error' });

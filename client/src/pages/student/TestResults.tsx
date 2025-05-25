@@ -46,8 +46,8 @@ export default function TestResults() {
     );
   }
 
-  const item = isAssignment ? resultData.assignment : resultData.test;
-  const { result } = resultData;
+  const { test, assignment, result } = resultData;
+  const item = isAssignment ? assignment : test;
 
   return (
     <StudentLayout>
@@ -55,12 +55,12 @@ export default function TestResults() {
         <div className="flex items-center justify-between">
           <div>
             <Button variant="outline" asChild className="mb-4">
-              <Link href={`/student/courses/${item.courseId}`}>
-                <ArrowLeft className="h-4 w-4 mr-2" /> Back to Course
+              <Link href={item?.courseId ? `/student/courses/${item.courseId}` : (isAssignment ? '/student/assignments' : '/student/tests')}>
+                <ArrowLeft className="h-4 w-4 mr-2" /> Back to {item?.courseId ? 'Course' : (isAssignment ? 'Assignments' : 'Tests')}
               </Link>
             </Button>
-            <h2 className="text-2xl font-bold">{item.title} Results</h2>
-            <p className="text-gray-600 dark:text-gray-400">{item.description}</p>
+            <h2 className="text-2xl font-bold">{item?.title} Results</h2>
+            <p className="text-gray-600 dark:text-gray-400">{item?.description}</p>
           </div>
         </div>
 
@@ -80,7 +80,7 @@ export default function TestResults() {
         </Card>
 
         <div className="space-y-6">
-          {item.questions?.map((question, index) => {
+          {item?.questions?.map((question, index) => {
             const answer = result.answers.find(a => a.questionId === (question._id || index.toString()));
             const isCorrect = answer?.isCorrect;
 
