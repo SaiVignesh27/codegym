@@ -54,6 +54,15 @@ const courseFormSchema = z.object({
   image: z.string().optional(),
   visibility: z.enum(["public", "private"]),
   assignedTo: z.array(z.string()).optional(),
+  instructor: z.object({
+    name: z.string().optional(),
+    title: z.string().optional(),
+    initials: z.string().max(2).optional(),
+  }).optional(),
+  learningObjectives: z.array(z.string()).optional(),
+  prerequisites: z.array(z.string()).optional(),
+  skillLevel: z.enum(["beginner", "intermediate", "advanced"]).optional(),
+  duration: z.string().optional(),
 });
 
 type CourseFormValues = z.infer<typeof courseFormSchema>;
@@ -63,7 +72,7 @@ export default function Courses() {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
-  
+
   // Fetch courses
   const { data: courses, isLoading: isLoadingCourses } = useQuery<Course[]>({
     queryKey: ['/api/admin/courses'],
@@ -84,6 +93,15 @@ export default function Courses() {
       image: '',
       visibility: 'public',
       assignedTo: [],
+      instructor: {
+        name: '',
+        title: '',
+        initials: '',
+      },
+      learningObjectives: [],
+      prerequisites: [],
+      skillLevel: 'beginner',
+      duration: '',
     },
   });
 
@@ -97,6 +115,11 @@ export default function Courses() {
         image: selectedCourse.image || '',
         visibility: selectedCourse.visibility,
         assignedTo: selectedCourse.assignedTo || [],
+        instructor: selectedCourse.instructor || { name: '', title: '', initials: '' },
+        learningObjectives: selectedCourse.learningObjectives || [],
+        prerequisites: selectedCourse.prerequisites || [],
+        skillLevel: selectedCourse.skillLevel || 'beginner',
+        duration: selectedCourse.duration || '',
       });
     } else {
       form.reset({
@@ -106,6 +129,15 @@ export default function Courses() {
         image: '',
         visibility: 'public',
         assignedTo: [],
+        instructor: {
+          name: '',
+          title: '',
+          initials: '',
+        },
+        learningObjectives: [],
+        prerequisites: [],
+        skillLevel: 'beginner',
+        duration: '',
       });
     }
   }, [selectedCourse, form]);
@@ -347,32 +379,150 @@ export default function Courses() {
                   )}
                 />
               </div>
-              <FormField
-                control={form.control}
-                name="visibility"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Visibility</FormLabel>
-                    <Select 
-                      onValueChange={field.onChange} 
-                      defaultValue={field.value}
-                      value={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select visibility" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="public">Public (all students)</SelectItem>
-                        <SelectItem value="private">Private (selected students only)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
               
+      <FormField
+        control={form.control}
+        name="instructor.name"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Instructor Name</FormLabel>
+            <FormControl>
+              <Input placeholder="Enter instructor name" {...field} />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="instructor.title"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Instructor Title</FormLabel>
+            <FormControl>
+              <Input placeholder="e.g. Lead Instructor" {...field} />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="instructor.initials"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Instructor Initials</FormLabel>
+            <FormControl>
+              <Input placeholder="e.g. JD" maxLength={2} {...field} />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="learningObjectives"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Learning Objectives (one per line)</FormLabel>
+            <FormControl>
+              <Textarea 
+                placeholder="Enter learning objectives" 
+                {...field}
+                onChange={(e) => field.onChange(e.target.value.split('\n'))}
+                value={field.value?.join('\n')}
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="prerequisites"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Prerequisites (one per line)</FormLabel>
+            <FormControl>
+              <Textarea 
+                placeholder="Enter prerequisites" 
+                {...field}
+                onChange={(e) => field.onChange(e.target.value.split('\n'))}
+                value={field.value?.join('\n')}
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="skillLevel"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Skill Level</FormLabel>
+            <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select skill level" />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                <SelectItem value="beginner">Beginner</SelectItem>
+                <SelectItem value="intermediate">Intermediate</SelectItem>
+                <SelectItem value="advanced">Advanced</SelectItem>
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="duration"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Duration</FormLabel>
+            <FormControl>
+              <Input placeholder="e.g. 4 weeks" {...field} />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="visibility"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Visibility</FormLabel>
+            <Select 
+              onValueChange={field.onChange} 
+              defaultValue={field.value}
+              value={field.value}
+            >
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select visibility" />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                <SelectItem value="public">Public (all students)</SelectItem>
+                <SelectItem value="private">Private (selected students only)</SelectItem>
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
               {form.watch('visibility') === 'private' && (
                 <div>
                   <Label>Assign to Students</Label>
@@ -412,7 +562,7 @@ export default function Courses() {
                   </div>
                 </div>
               )}
-              
+
               <DialogFooter>
                 <Button 
                   type="submit" 

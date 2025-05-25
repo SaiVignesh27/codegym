@@ -23,6 +23,14 @@ export const courseSchema = z.object({
   learningObjectives: z.array(z.string()).optional(),
   visibility: z.enum(["public", "private"]),
   assignedTo: z.array(z.string()).optional(),
+  instructor: z.object({
+    name: z.string(),
+    title: z.string(),
+    initials: z.string()
+  }).optional(),
+  prerequisites: z.array(z.string()).optional(),
+  skillLevel: z.enum(["beginner", "intermediate", "advanced"]).optional(),
+  totalDuration: z.string().optional(),
   createdBy: z.string(),
   createdAt: z.date().optional(),
   updatedAt: z.date().optional(),
