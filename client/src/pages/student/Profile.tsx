@@ -63,9 +63,49 @@ export default function Profile() {
     queryKey: ['/api/student/profile'],
   });
 
+  // Define stats type with default mock data for development
+  type UserStats = {
+    enrolledCourses: number;
+    completedCourses: number;
+    averageScore: number;
+    overallProgress: number;
+    testsCompleted: number;
+    assignmentsCompleted: number;
+    classesAttended: number;
+    codingPoints: number;
+    quizPoints: number;
+    participationPoints: number;
+    skills: {
+      javascript: number;
+      react: number;
+      nodejs: number;
+      database: number;
+      problemSolving: number;
+    };
+  };
+
   // Fetch user progress and stats
-  const { data: stats, isLoading: isLoadingStats } = useQuery({
+  const { data: stats, isLoading: isLoadingStats } = useQuery<UserStats>({
     queryKey: ['/api/student/stats'],
+    initialData: {
+      enrolledCourses: 3,
+      completedCourses: 1,
+      averageScore: 86,
+      overallProgress: 65,
+      testsCompleted: 12,
+      assignmentsCompleted: 8,
+      classesAttended: 24,
+      codingPoints: 450,
+      quizPoints: 320,
+      participationPoints: 180,
+      skills: {
+        javascript: 80,
+        react: 65,
+        nodejs: 60,
+        database: 50,
+        problemSolving: 75
+      }
+    }
   });
 
   // Setup form with validation for profile

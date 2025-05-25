@@ -167,8 +167,8 @@ export default function Assignments() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Courses</SelectItem>
-              {courses?.map((course) => (
-                <SelectItem key={course._id} value={course._id as string}>
+              {courses.map((course) => (
+                <SelectItem key={course._id} value={course._id || ''}>
                   {course.title}
                 </SelectItem>
               ))}

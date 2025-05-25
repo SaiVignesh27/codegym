@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import StudentLayout from '@/components/layout/StudentLayout';
 import { LeaderboardEntry } from '@shared/types';
+import { Course } from '@shared/schema';
 import { format } from 'date-fns';
 
 import {
@@ -57,7 +58,7 @@ export default function Leaderboard() {
   });
   
   // Fetch courses for filter
-  const { data: courses } = useQuery({
+  const { data: courses = [] } = useQuery<Course[]>({
     queryKey: ['/api/student/courses'],
   });
   
@@ -109,7 +110,7 @@ export default function Leaderboard() {
   // Get course name
   const getCourseName = (courseId?: string) => {
     if (!courseId) return 'All Courses';
-    const course = courses?.find(c => c._id === courseId);
+    const course = courses.find(course => course._id === courseId);
     return course?.title || 'Unknown Course';
   };
   
@@ -164,8 +165,8 @@ export default function Leaderboard() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Courses</SelectItem>
-              {courses?.map((course) => (
-                <SelectItem key={course._id} value={course._id as string}>
+              {courses.map((course) => (
+                <SelectItem key={course._id} value={course._id || ''}>
                   {course.title}
                 </SelectItem>
               ))}
