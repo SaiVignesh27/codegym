@@ -281,6 +281,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: 'Internal server error' });
     }
   });
+
+  app.patch('/api/admin/profile', async (req, res) => {
+    try {
+      const { name, email } = req.body;
+      const admin = await mongoStorage.getUserByEmail('admin@codegym.com');
+      
+      if (!admin) {
+        return res.status(404).json({ error: 'Admin not found' });
+      }
+
+      const updatedAdmin = await mongoStorage.updateUser(admin._id, { name, email });
+      const { password, ...adminData } = updatedAdmin;
+      
+      res.json(adminData);
+    } catch (error) {
+      console.error('Error updating admin profile:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.patch('/api/admin/profile/password', async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const admin = await mongoStorage.getUserByEmail('admin@codegym.com');
+      
+      if (!admin) {
+        return res.status(404).json({ error: 'Admin not found' });
+      }
+
+      const isValidPassword = await bcrypt.compare(currentPassword, admin.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: 'Current password is incorrect' });
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await mongoStorage.updateUser(admin._id, { password: hashedPassword });
+      
+      res.json({ message: 'Password updated successfully' });
+    } catch (error) {
+      console.error('Error updating admin password:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
   
   // Admin User Management Endpoints
   app.get('/api/admin/users', async (req, res) => {
