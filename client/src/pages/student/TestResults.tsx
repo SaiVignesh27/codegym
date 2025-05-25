@@ -3,7 +3,6 @@ import React from 'react';
 import { useParams, Link, useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import StudentLayout from '@/components/layout/StudentLayout';
-import { Test, Assignment, Result } from '@shared/schema';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -14,7 +13,7 @@ export default function TestResults() {
   const [location] = useLocation();
   const isAssignment = location.includes('assignments');
   
-  const { data: resultData, isLoading } = useQuery({
+  const { data: resultData, isLoading, error } = useQuery({
     queryKey: [`/api/student/${isAssignment ? 'assignments' : 'tests'}/${id}/results`],
   });
 
@@ -28,7 +27,7 @@ export default function TestResults() {
     );
   }
 
-  if (!resultData) {
+  if (error || !resultData || !resultData.result) {
     return (
       <StudentLayout>
         <div className="text-center py-12">
@@ -37,7 +36,7 @@ export default function TestResults() {
             The results you're looking for don't exist or you don't have access to them.
           </p>
           <Button asChild>
-            <Link href={isAssignment ? "/student/assignments" : "/student/tests"}>
+            <Link href={isAssignment ? "/student/assignments" : "/student/daily-tests"}>
               Back to {isAssignment ? "Assignments" : "Tests"}
             </Link>
           </Button>
@@ -48,31 +47,33 @@ export default function TestResults() {
 
   const { test, assignment, result } = resultData;
   const item = isAssignment ? assignment : test;
+  const courseId = item?.courseId;
+  const backPath = courseId 
+    ? `/student/courses/${courseId}`
+    : (isAssignment ? '/student/assignments' : '/student/daily-tests');
 
   return (
     <StudentLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <Button variant="outline" asChild className="mb-4">
-              <Link href={item?.courseId ? `/student/courses/${item.courseId}` : (isAssignment ? '/student/assignments' : '/student/tests')}>
-                <ArrowLeft className="h-4 w-4 mr-2" /> Back to {item?.courseId ? 'Course' : (isAssignment ? 'Assignments' : 'Tests')}
-              </Link>
-            </Button>
-            <h2 className="text-2xl font-bold">{item?.title} Results</h2>
-            <p className="text-gray-600 dark:text-gray-400">{item?.description}</p>
-          </div>
+        <div>
+          <Button variant="outline" asChild className="mb-4">
+            <Link href={backPath}>
+              <ArrowLeft className="h-4 w-4 mr-2" /> 
+              Back to {courseId ? 'Course' : (isAssignment ? 'Assignments' : 'Tests')}
+            </Link>
+          </Button>
+          <h2 className="text-2xl font-bold">{item?.title || 'Results'}</h2>
         </div>
 
         <Card>
           <CardHeader>
             <CardTitle>Your Score</CardTitle>
             <CardDescription>
-              You scored {result.score}% on this {isAssignment ? 'assignment' : 'test'}
+              You scored {result.score || 0}% on this {isAssignment ? 'assignment' : 'test'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Progress value={result.score} className="my-2" />
+            <Progress value={result.score || 0} className="my-2" />
             <p className="text-sm text-gray-500 mt-2">
               Completed on {new Date(result.submittedAt).toLocaleDateString()}
             </p>

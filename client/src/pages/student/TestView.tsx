@@ -88,12 +88,13 @@ export default function TestView() {
       });
 
       if (!response.ok) throw new Error('Failed to submit test');
-      return response.json();
+      const result = await response.json();
+      return result;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/student/tests/${id}`] });
-      queryClient.setQueryData([`/api/student/tests/${id}/results`], data);
-      setLocation(`/student/tests/${id}/results`);
+      queryClient.invalidateQueries({ queryKey: [`/api/student/tests/${id}/results`] });
+      setLocation(`/student/daily-tests/${id}/results`);
     },
   });
 
