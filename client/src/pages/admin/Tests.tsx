@@ -93,7 +93,7 @@ export default function Tests() {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedTest, setSelectedTest] = useState<Test | null>(null);
-  
+
   // Fetch tests
   const { data: tests, isLoading: isLoadingTests } = useQuery<Test[]>({
     queryKey: ['/api/admin/tests'],
@@ -274,7 +274,7 @@ export default function Tests() {
         return q;
       })
     };
-    
+
     if (selectedTest) {
       updateTestMutation.mutate({ id: selectedTest._id as string, testData: processedData });
     } else {
@@ -399,7 +399,7 @@ export default function Tests() {
             />
           </>
         );
-        
+
       case 'fill':
         return (
           <FormField
@@ -421,7 +421,7 @@ export default function Tests() {
             )}
           />
         );
-        
+
       case 'code':
         return (
           <>
@@ -443,7 +443,7 @@ export default function Tests() {
                 </FormItem>
               )}
             />
-            
+
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <Label>Test Cases</Label>
@@ -462,7 +462,7 @@ export default function Tests() {
                   <Plus className="h-4 w-4 mr-1" /> Add Test Case
                 </Button>
               </div>
-              
+
               {(form.getValues(`questions.${index}.testCases`) || []).map((_, testIndex) => (
                 <div key={testIndex} className="grid grid-cols-2 gap-4 p-3 border rounded-md relative">
                   <Button
@@ -480,7 +480,7 @@ export default function Tests() {
                   >
                     <Minus className="h-4 w-4" />
                   </Button>
-                  
+
                   <FormField
                     control={form.control}
                     name={`questions.${index}.testCases.${testIndex}.input`}
@@ -494,7 +494,7 @@ export default function Tests() {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name={`questions.${index}.testCases.${testIndex}.output`}
@@ -513,7 +513,7 @@ export default function Tests() {
             </div>
           </>
         );
-        
+
       default:
         return null;
     }
@@ -603,7 +603,7 @@ export default function Tests() {
                   <TabsTrigger value="details">Test Details</TabsTrigger>
                   <TabsTrigger value="questions">Questions</TabsTrigger>
                 </TabsList>
-                
+
                 <TabsContent value="details" className="space-y-4 pt-4">
                   <FormField
                     control={form.control}
@@ -766,7 +766,7 @@ export default function Tests() {
                       )}
                     />
                   </div>
-                  
+
                   {form.watch('visibility') === 'private' && (
                     <div>
                       <Label>Assign to Students</Label>
@@ -807,7 +807,7 @@ export default function Tests() {
                     </div>
                   )}
                 </TabsContent>
-                
+
                 <TabsContent value="questions" className="space-y-6 pt-4">
                   <div className="flex justify-between items-center">
                     <h4 className="text-lg font-medium">Questions</h4>
@@ -815,7 +815,7 @@ export default function Tests() {
                       <Plus className="h-4 w-4 mr-2" /> Add Question
                     </Button>
                   </div>
-                  
+
                   <Accordion type="multiple" className="w-full">
                     {fields.map((field, index) => (
                       <AccordionItem key={field.id} value={`question-${index}`}>
@@ -840,7 +840,7 @@ export default function Tests() {
                                 <Minus className="h-4 w-4 mr-1" /> Remove
                               </Button>
                             </div>
-                            
+
                             <FormField
                               control={form.control}
                               name={`questions.${index}.text`}
@@ -854,7 +854,7 @@ export default function Tests() {
                                 </FormItem>
                               )}
                             />
-                            
+
                             <div className="grid grid-cols-2 gap-4">
                               <FormField
                                 control={form.control}
@@ -909,7 +909,7 @@ export default function Tests() {
                                   </FormItem>
                                 )}
                               />
-                              
+
                               <FormField
                                 control={form.control}
                                 name={`questions.${index}.points`}
@@ -929,7 +929,7 @@ export default function Tests() {
                                 )}
                               />
                             </div>
-                            
+
                             {/* Render different form fields based on question type */}
                             {renderQuestionForm(index, form.watch(`questions.${index}.type`))}
                           </div>
@@ -939,7 +939,7 @@ export default function Tests() {
                   </Accordion>
                 </TabsContent>
               </Tabs>
-              
+
               <DialogFooter>
                 <Button 
                   type="submit" 

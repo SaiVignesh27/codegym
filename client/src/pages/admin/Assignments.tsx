@@ -122,7 +122,7 @@ export default function Assignments() {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
-  
+
   // Fetch assignments
   const { data: assignments, isLoading: isLoadingAssignments } = useQuery<Assignment[]>({
     queryKey: ['/api/admin/assignments'],
@@ -285,7 +285,7 @@ export default function Assignments() {
         return q;
       })
     };
-    
+
     if (selectedAssignment) {
       updateAssignmentMutation.mutate({ id: selectedAssignment._id as string, assignmentData: processedData });
     } else {
@@ -423,7 +423,7 @@ export default function Assignments() {
             />
           </>
         );
-        
+
       case 'fill':
         return (
           <FormField
@@ -445,7 +445,7 @@ export default function Assignments() {
             )}
           />
         );
-        
+
       case 'code':
         return (
           <>
@@ -467,7 +467,7 @@ export default function Assignments() {
                 </FormItem>
               )}
             />
-            
+
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <Label>Test Cases</Label>
@@ -486,7 +486,7 @@ export default function Assignments() {
                   <Plus className="h-4 w-4 mr-1" /> Add Test Case
                 </Button>
               </div>
-              
+
               {(form.getValues(`questions.${index}.testCases`) || []).map((_, testIndex) => (
                 <div key={testIndex} className="grid grid-cols-2 gap-4 p-3 border rounded-md relative">
                   <Button
@@ -504,7 +504,7 @@ export default function Assignments() {
                   >
                     <Minus className="h-4 w-4" />
                   </Button>
-                  
+
                   <FormField
                     control={form.control}
                     name={`questions.${index}.testCases.${testIndex}.input`}
@@ -518,7 +518,7 @@ export default function Assignments() {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name={`questions.${index}.testCases.${testIndex}.output`}
@@ -537,7 +537,7 @@ export default function Assignments() {
             </div>
           </>
         );
-        
+
       default:
         return null;
     }
@@ -673,7 +673,7 @@ export default function Assignments() {
                   <TabsTrigger value="details">Assignment Details</TabsTrigger>
                   <TabsTrigger value="questions">Questions</TabsTrigger>
                 </TabsList>
-                
+
                 <TabsContent value="details" className="space-y-4 pt-4">
                   <FormField
                     control={form.control}
@@ -839,7 +839,7 @@ export default function Assignments() {
                       </FormItem>
                     )}
                   />
-                  
+
                   {form.watch('visibility') === 'private' && (
                     <div>
                       <Label>Assign to Students</Label>
@@ -880,7 +880,7 @@ export default function Assignments() {
                     </div>
                   )}
                 </TabsContent>
-                
+
                 <TabsContent value="questions" className="space-y-6 pt-4">
                   <div className="flex justify-between items-center">
                     <h4 className="text-lg font-medium">Questions</h4>
@@ -888,7 +888,7 @@ export default function Assignments() {
                       <Plus className="h-4 w-4 mr-2" /> Add Question
                     </Button>
                   </div>
-                  
+
                   <Accordion type="multiple" className="w-full">
                     {fields.map((field, index) => (
                       <AccordionItem key={field.id} value={`question-${index}`}>
@@ -913,7 +913,7 @@ export default function Assignments() {
                                 <Minus className="h-4 w-4 mr-1" /> Remove
                               </Button>
                             </div>
-                            
+
                             <FormField
                               control={form.control}
                               name={`questions.${index}.text`}
@@ -927,7 +927,7 @@ export default function Assignments() {
                                 </FormItem>
                               )}
                             />
-                            
+
                             <div className="grid grid-cols-2 gap-4">
                               <FormField
                                 control={form.control}
@@ -982,7 +982,7 @@ export default function Assignments() {
                                   </FormItem>
                                 )}
                               />
-                              
+
                               <FormField
                                 control={form.control}
                                 name={`questions.${index}.points`}
@@ -1002,10 +1002,10 @@ export default function Assignments() {
                                 )}
                               />
                             </div>
-                            
+
                             {/* Render different form fields based on question type */}
                             {renderQuestionForm(index, form.watch(`questions.${index}.type`))}
-                            
+
                             {form.watch('allowFileUpload') && (
                               <div className="mt-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-md">
                                 <div className="flex items-center text-gray-600 dark:text-gray-300">
@@ -1021,7 +1021,7 @@ export default function Assignments() {
                   </Accordion>
                 </TabsContent>
               </Tabs>
-              
+
               <DialogFooter>
                 <Button 
                   type="submit" 
