@@ -18,6 +18,9 @@ export const courseSchema = z.object({
   description: z.string().optional(),
   image: z.string().optional(),
   category: z.string().optional(),
+  level: z.string().optional(),
+  duration: z.string().optional(),
+  learningObjectives: z.array(z.string()).optional(),
   visibility: z.enum(["public", "private"]),
   assignedTo: z.array(z.string()).optional(),
   createdBy: z.string(),
@@ -32,9 +35,21 @@ export const classSchema = z.object({
   description: z.string().optional(),
   courseId: z.string(),
   content: z.object({
-    type: z.enum(["video", "document"]),
+    type: z.enum(["video", "document", "presentation", "code", "quiz"]),
     url: z.string(),
+    downloadable: z.boolean().optional(),
+    duration: z.number().optional(), // in minutes for videos
+    fileSize: z.number().optional(), // in KB for documents
+    fileType: z.string().optional(), // e.g., "pdf", "docx", "mp4"
   }),
+  materials: z.array(z.object({
+    title: z.string(),
+    description: z.string().optional(),
+    type: z.enum(["document", "code", "resource"]),
+    url: z.string(),
+    fileType: z.string().optional(),
+    downloadable: z.boolean().default(true),
+  })).optional(),
   visibility: z.enum(["public", "private"]),
   assignedTo: z.array(z.string()).optional(),
   createdBy: z.string(),

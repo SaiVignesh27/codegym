@@ -347,11 +347,20 @@ export default function CourseDetail() {
                           {getStatusIcon('completed')}
                           <span className="ml-1">Completed</span>
                         </Badge>
-                        <Button asChild size="sm">
-                          <a href={`/student/classes/${classItem._id}`}>
-                            View Class <ArrowRight className="ml-2 h-4 w-4" />
-                          </a>
-                        </Button>
+                        <div className="flex gap-2">
+                          {classItem.content?.downloadable && (
+                            <Button variant="outline" size="sm" asChild>
+                              <a href={classItem.content.url} download target="_blank" rel="noopener noreferrer">
+                                Download
+                              </a>
+                            </Button>
+                          )}
+                          <Button size="sm" asChild>
+                            <a href={`/student/classes/${classItem._id}`}>
+                              View Class <ArrowRight className="ml-2 h-4 w-4" />
+                            </a>
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </Card>

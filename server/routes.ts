@@ -700,6 +700,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Student Endpoints
+  app.get('/api/student/courses/:id', async (req, res) => {
+    try {
+      const courseId = req.params.id;
+      const course = await mongoStorage.getCourse(courseId);
+      
+      if (!course) {
+        return res.status(404).json({ error: 'Course not found' });
+      }
+      
+      res.json(course);
+    } catch (error) {
+      console.error('Error fetching course details:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
   app.get('/api/student/tests', async (req, res) => {
     try {
       const courseId = req.query.courseId as string | undefined;
