@@ -898,7 +898,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error fetching student classes:', error);
       res.status(500).json({ error: 'Internal server error' });
-```text
+    }
+  });
       res.status(500).json({ error: 'Internal server error' });
     }
   });
