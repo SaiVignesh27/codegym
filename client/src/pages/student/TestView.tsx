@@ -52,10 +52,14 @@ export default function TestView() {
 
   const submitTest = useMutation({
     mutationFn: async () => {
-      const response = await fetch(`/api/student/tests/${id}/submit`, {
+      const response = await fetch(`/api/student/results`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers }),
+        body: JSON.stringify({ 
+          testId: id,
+          answers,
+          submittedAt: new Date()
+        }),
       });
       if (!response.ok) throw new Error('Failed to submit test');
       return response.json();

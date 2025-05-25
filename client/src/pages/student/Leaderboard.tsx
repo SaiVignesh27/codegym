@@ -55,6 +55,7 @@ export default function Leaderboard() {
   // Fetch leaderboard data
   const { data: leaderboardData, isLoading } = useQuery<LeaderboardEntry[]>({
     queryKey: ['/api/student/leaderboard', timeFilter, courseFilter, typeFilter],
+    refetchInterval: 30000, // Refetch every 30 seconds
   });
   
   // Fetch courses for filter

@@ -42,6 +42,39 @@ export default function AssignmentView() {
     );
   }
 
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const submitAssignment = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/student/results`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          assignmentId: id,
+          answers,
+          submittedAt: new Date()
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to submit assignment');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/student/assignments/${id}`] });
+      setLocation(`/student/assignments/${id}/results`);
+    },
+  });
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      await submitAssignment.mutateAsync();
+    } catch (error) {
+      console.error('Failed to submit assignment:', error);
+    }
+    setIsSubmitting(false);
+  };
+
   return (
     <StudentLayout>
       <div className="space-y-6">
@@ -63,9 +96,28 @@ export default function AssignmentView() {
             {assignment.questions?.map((question, index) => (
               <div key={index} className="mb-6">
                 <h3 className="font-medium mb-2">Question {index + 1}</h3>
-                <p>{question.text}</p>
+                <p className="mb-4">{question.text}</p>
+                <textarea
+                  className="w-full p-2 border rounded-md dark:bg-gray-800"
+                  rows={4}
+                  placeholder="Enter your answer here..."
+                  value={answers[question._id || index.toString()] || ''}
+                  onChange={(e) => setAnswers(prev => ({
+                    ...prev,
+                    [question._id || index.toString()]: e.target.value
+                  }))}
+                />
               </div>
             ))}
+            <div className="flex justify-end mt-6">
+              <Button
+                onClick={handleSubmit}
+                disabled={isSubmitting}
+              >
+                {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Submit Assignment
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
