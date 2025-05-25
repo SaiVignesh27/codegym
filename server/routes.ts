@@ -262,6 +262,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: 'Internal server error' });
     }
   });
+
+  app.patch('/api/student/profile', async (req, res) => {
+    try {
+      const { name, email } = req.body;
+      const student = await mongoStorage.getUserByEmail('student@codegym.com');
+      
+      if (!student) {
+        return res.status(404).json({ error: 'Student not found' });
+      }
+
+      const updatedStudent = await mongoStorage.updateUser(student._id, { name, email });
+      const { password, ...studentData } = updatedStudent;
+      
+      res.json(studentData);
+    } catch (error) {
+      console.error('Error updating student profile:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.patch('/api/student/profile/password', async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const student = await mongoStorage.getUserByEmail('student@codegym.com');
+      
+      if (!student) {
+        return res.status(404).json({ error: 'Student not found' });
+      }
+
+      const isValidPassword = await bcrypt.compare(currentPassword, student.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: 'Current password is incorrect' });
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await mongoStorage.updateUser(student._id, { password: hashedPassword });
+      
+      res.json({ message: 'Password updated successfully' });
+    } catch (error) {
+      console.error('Error updating student password:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
   
   app.get('/api/admin/profile', async (req, res) => {
     try {
