@@ -9,6 +9,271 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ message: 'API is working!' });
   });
   
+  // Admin Dashboard Endpoints
+  app.get('/api/admin/dashboard/stats', async (req, res) => {
+    try {
+      // Get counts from storage
+      const users = await storage.listUsers('student');
+      const courses = await storage.listCourses();
+      const tests = await storage.listTests();
+      const assignments = await storage.listAssignments();
+      
+      const stats = {
+        students: users.length,
+        courses: courses.length,
+        tests: tests.length,
+        assignments: assignments.length,
+      };
+      
+      res.json(stats);
+    } catch (error) {
+      console.error('Error fetching dashboard stats:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/admin/courses/recent', async (req, res) => {
+    try {
+      const courses = await storage.listCourses();
+      // Sort by creation date (newest first) and limit to 5
+      const recentCourses = courses
+        .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))
+        .slice(0, 5);
+      
+      res.json(recentCourses);
+    } catch (error) {
+      console.error('Error fetching recent courses:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/admin/tests/recent', async (req, res) => {
+    try {
+      const tests = await storage.listTests();
+      // Sort by creation date (newest first) and limit to 5
+      const recentTests = tests
+        .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))
+        .slice(0, 5);
+      
+      res.json(recentTests);
+    } catch (error) {
+      console.error('Error fetching recent tests:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/admin/activities/recent', async (req, res) => {
+    try {
+      // Activity data for demonstration
+      const activities = [
+        {
+          _id: '1',
+          type: 'enrollment',
+          title: 'New Enrollment',
+          details: 'John Doe enrolled in JavaScript Basics',
+          timestamp: new Date(),
+          icon: 'user-plus',
+          color: 'blue'
+        },
+        {
+          _id: '2',
+          type: 'completion',
+          title: 'Course Completed',
+          details: 'Sarah Miller completed React Fundamentals',
+          timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000),
+          icon: 'check-circle',
+          color: 'green'
+        },
+        {
+          _id: '3',
+          type: 'update',
+          title: 'Course Updated',
+          details: 'Node.js Advanced was updated with new content',
+          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
+          icon: 'refresh-cw',
+          color: 'purple'
+        },
+        {
+          _id: '4',
+          type: 'deadline',
+          title: 'Assignment Due',
+          details: 'Database Design assignment is due tomorrow',
+          timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000),
+          icon: 'clock',
+          color: 'orange'
+        }
+      ];
+      
+      res.json(activities);
+    } catch (error) {
+      console.error('Error fetching recent activities:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  // Student Dashboard Endpoints
+  app.get('/api/student/courses', async (req, res) => {
+    try {
+      const courses = await storage.listCourses({ visibility: 'public' });
+      
+      // Add progress information for each course
+      const coursesWithProgress = courses.map(course => ({
+        ...course,
+        progress: Math.floor(Math.random() * 100),
+        instructor: {
+          name: 'John Instructor',
+          initials: 'JI'
+        }
+      }));
+      
+      res.json(coursesWithProgress);
+    } catch (error) {
+      console.error('Error fetching student courses:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/student/tests/upcoming', async (req, res) => {
+    try {
+      const tests = await storage.listTests({ visibility: 'public' });
+      
+      // Add additional information for display
+      const upcomingTests = tests.slice(0, 3).map(test => ({
+        ...test,
+        dueDate: new Date(Date.now() + Math.floor(Math.random() * 10) * 24 * 60 * 60 * 1000),
+        status: 'pending'
+      }));
+      
+      res.json(upcomingTests);
+    } catch (error) {
+      console.error('Error fetching upcoming tests:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/student/assignments/pending', async (req, res) => {
+    try {
+      const assignments = await storage.listAssignments({ visibility: 'public' });
+      
+      // Add due dates and status
+      const pendingAssignments = assignments.slice(0, 3).map(assignment => ({
+        ...assignment,
+        dueDate: new Date(Date.now() + Math.floor(Math.random() * 10) * 24 * 60 * 60 * 1000),
+        status: 'pending'
+      }));
+      
+      res.json(pendingAssignments);
+    } catch (error) {
+      console.error('Error fetching pending assignments:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/student/achievements', async (req, res) => {
+    try {
+      // Sample achievements data
+      const achievements = [
+        {
+          _id: '1',
+          title: 'Course Champion',
+          description: 'Completed JavaScript Fundamentals with 95% score',
+          date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+          icon: 'award',
+          type: 'course'
+        },
+        {
+          _id: '2',
+          title: 'Test Ace',
+          description: 'Scored 100% on React Components Test',
+          date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+          icon: 'check-circle',
+          type: 'test'
+        },
+        {
+          _id: '3',
+          title: 'Quick Learner',
+          description: 'Completed 3 classes in one day',
+          date: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000),
+          icon: 'zap',
+          type: 'class'
+        }
+      ];
+      
+      res.json(achievements);
+    } catch (error) {
+      console.error('Error fetching achievements:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/student/stats', async (req, res) => {
+    try {
+      // Sample student stats data
+      const stats = {
+        enrolledCourses: 5,
+        completedCourses: 2,
+        averageScore: 87,
+        overallProgress: 65,
+        testsCompleted: 12,
+        assignmentsCompleted: 8,
+        classesAttended: 24,
+        codingPoints: 450,
+        quizPoints: 320,
+        participationPoints: 180,
+        skills: {
+          javascript: 85,
+          react: 70,
+          nodejs: 60,
+          database: 55,
+          problemSolving: 80
+        }
+      };
+      
+      res.json(stats);
+    } catch (error) {
+      console.error('Error fetching student stats:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/student/profile', async (req, res) => {
+    try {
+      // Get the student user
+      const student = await storage.getUserByEmail('student@codegym.com');
+      
+      if (!student) {
+        return res.status(404).json({ error: 'Student not found' });
+      }
+      
+      // Don't send the password
+      const { password, ...studentData } = student;
+      
+      res.json(studentData);
+    } catch (error) {
+      console.error('Error fetching student profile:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/admin/profile', async (req, res) => {
+    try {
+      // Get the admin user
+      const admin = await storage.getUserByEmail('admin@codegym.com');
+      
+      if (!admin) {
+        return res.status(404).json({ error: 'Admin not found' });
+      }
+      
+      // Don't send the password
+      const { password, ...adminData } = admin;
+      
+      res.json(adminData);
+    } catch (error) {
+      console.error('Error fetching admin profile:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
   // Authentication routes
   app.post('/api/auth/admin/login', async (req, res) => {
     try {
