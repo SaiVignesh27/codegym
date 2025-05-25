@@ -66,6 +66,9 @@ function Router() {
 <Route path="/student/classes/:id" component={() => import('./pages/student/ClassView')} />
       <Route path="/student/daily-tests" component={StudentDailyTests} />
       <Route path="/student/tests/:id" component={() => import('./pages/student/TestView')} />
+<Route path="/student/tests/:id/results" component={() => import('./pages/student/TestResults')} />
+<Route path="/student/assignments/:id" component={() => import('./pages/student/AssignmentView')} />
+<Route path="/student/assignments/:id/results" component={() => import('./pages/student/AssignmentResults')} />
       <Route path="/student/assignments" component={StudentAssignments} />
       <Route path="/student/leaderboard" component={StudentLeaderboard} />
       <Route path="/student/profile" component={StudentProfile} />

@@ -1,27 +1,81 @@
 
 import React, { useState } from 'react';
-import { useParams, Link } from 'wouter';
-import { useQuery } from '@tanstack/react-query';
+import { useParams, useLocation } from 'wouter';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import StudentLayout from '@/components/layout/StudentLayout';
-import { Test } from '@shared/schema';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Test, Question } from '@shared/schema';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { Loader2, ArrowLeft, Timer } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Loader2, ArrowLeft, Timer, AlertTriangle } from 'lucide-react';
 
 export default function TestView() {
+  const [, setLocation] = useLocation();
   const { id } = useParams();
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+  const queryClient = useQueryClient();
+
   const { data: test, isLoading } = useQuery<Test>({
     queryKey: [`/api/student/tests/${id}`],
   });
 
+  // Start timer when test loads
+  React.useEffect(() => {
+    if (test?.timeLimit) {
+      setTimeLeft(test.timeLimit * 60); // Convert to seconds
+    }
+  }, [test]);
+
+  // Timer countdown
+  React.useEffect(() => {
+    if (timeLeft === null) return;
+    if (timeLeft <= 0) {
+      handleSubmit();
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setTimeLeft(prev => prev !== null ? prev - 1 : null);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [timeLeft]);
+
+  // Format time remaining
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Submit test mutation
+  const submitTest = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/student/tests/${id}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers }),
+      });
+      if (!response.ok) throw new Error('Failed to submit test');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/student/tests/${id}`] });
+      setLocation(`/student/tests/${id}/results`);
+    },
+  });
+
   const handleSubmit = async () => {
     setIsSubmitting(true);
-    // Implement test submission logic here
+    try {
+      await submitTest.mutateAsync();
+    } catch (error) {
+      console.error('Failed to submit test:', error);
+    }
     setIsSubmitting(false);
   };
 
@@ -44,7 +98,7 @@ export default function TestView() {
             The test you're looking for doesn't exist or you don't have access to it.
           </p>
           <Button asChild>
-            <Link href="/student/courses">Back to Courses</Link>
+            <Link href="/student/tests">Back to Tests</Link>
           </Button>
         </div>
       </StudentLayout>
@@ -64,11 +118,23 @@ export default function TestView() {
             <h2 className="text-2xl font-bold">{test.title}</h2>
             <p className="text-gray-600 dark:text-gray-400">{test.description}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Timer className="h-5 w-5 text-primary" />
-            <span>Time remaining: {test.timeLimit} minutes</span>
-          </div>
+          {timeLeft !== null && (
+            <div className="flex items-center gap-2 text-lg font-semibold">
+              <Timer className="h-5 w-5 text-primary" />
+              <span>{formatTime(timeLeft)}</span>
+            </div>
+          )}
         </div>
+
+        {timeLeft !== null && timeLeft < 300 && ( // Show warning when less than 5 minutes remaining
+          <Alert variant="warning">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Time is running out!</AlertTitle>
+            <AlertDescription>
+              You have less than 5 minutes remaining to complete this test.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <div className="space-y-6">
           {test.questions?.map((question, index) => (

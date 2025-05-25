@@ -41,6 +41,77 @@ export default function ClassView() {
     );
   }
 
+  // Extract video ID from YouTube URL if it's a YouTube video
+  const getYouTubeId = (url: string) => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
+
+  // Render content based on type
+  const renderContent = () => {
+    if (!classData.content) {
+      return (
+        <div className="text-center py-8 text-gray-500">
+          No content available for this class
+        </div>
+      );
+    }
+
+    if (classData.content.type === 'video') {
+      const youtubeId = getYouTubeId(classData.content.url);
+      if (youtubeId) {
+        return (
+          <div className="aspect-video rounded-lg overflow-hidden">
+            <iframe
+              src={`https://www.youtube.com/embed/${youtubeId}`}
+              className="w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        );
+      } else {
+        return (
+          <div className="aspect-video rounded-lg overflow-hidden">
+            <video 
+              src={classData.content.url} 
+              controls 
+              className="w-full h-full"
+            >
+              Your browser does not support the video tag.
+            </video>
+          </div>
+        );
+      }
+    }
+
+    if (classData.content.type === 'document') {
+      if (classData.content.url.endsWith('.pdf')) {
+        return (
+          <iframe
+            src={classData.content.url}
+            className="w-full h-[600px] rounded-lg border"
+          />
+        );
+      } else {
+        return (
+          <div className="p-4 border rounded-lg">
+            <a 
+              href={classData.content.url} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center text-primary hover:underline"
+            >
+              <FileText className="h-5 w-5 mr-2" />
+              View Document
+            </a>
+          </div>
+        );
+      }
+    }
+  };
+
   return (
     <StudentLayout>
       <div className="space-y-6">
@@ -64,32 +135,7 @@ export default function ClassView() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {classData.content?.type === 'video' ? (
-              <div className="aspect-video rounded-lg overflow-hidden">
-                <iframe
-                  src={classData.content.url}
-                  className="w-full h-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              </div>
-            ) : classData.content?.type === 'document' ? (
-              <div className="p-4 border rounded-lg">
-                <a 
-                  href={classData.content.url} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center text-primary hover:underline"
-                >
-                  <FileText className="h-5 w-5 mr-2" />
-                  View Document
-                </a>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                No content available for this class
-              </div>
-            )}
+            {renderContent()}
           </CardContent>
         </Card>
 
