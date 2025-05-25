@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useParams } from "wouter";
+import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import StudentLayout from "@/components/layout/StudentLayout";
 import { Course, Class, Test, Assignment } from "@shared/schema";
