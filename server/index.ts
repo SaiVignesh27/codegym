@@ -1,6 +1,11 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { MongoDBStorage } from "./mongodb";
+
+// Initialize MongoDB with the provided connection string
+const MONGODB_URI = "mongodb+srv://saivigneshkadiri:sai12345@codegym.bpmjmxr.mongodb.net/?retryWrites=true&w=majority&appName=codegym";
+export const mongoStorage = new MongoDBStorage(MONGODB_URI);
 
 const app = express();
 app.use(express.json());

@@ -1,9 +1,17 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { mongoStorage } from "./index";
 import bcrypt from "bcrypt";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Initialize MongoDB connection
+  try {
+    await mongoStorage.connect();
+    console.log('Connected to MongoDB successfully');
+  } catch (error) {
+    console.error('Failed to connect to MongoDB:', error);
+  }
   // Test API endpoint
   app.get('/api/test', (req, res) => {
     res.json({ message: 'API is working!' });

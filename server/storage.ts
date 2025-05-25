@@ -2,7 +2,7 @@ import { User, Course, Class, Test, Assignment, Result, InsertUser, InsertCourse
 import { ObjectId } from 'mongodb';
 import * as bcrypt from 'bcrypt';
 
-// MongoDB interface for our storage needs
+// Interface for our storage needs, whether in-memory or MongoDB
 export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | null>;
