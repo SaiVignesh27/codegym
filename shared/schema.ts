@@ -126,18 +126,23 @@ export const resultSchema = z.object({
   courseId: z.string(),
   testId: z.string().optional(),
   assignmentId: z.string().optional(),
+  type: z.enum(["test", "assignment"]),
   answers: z.array(
     z.object({
       questionId: z.string(),
-      answer: z.any(), // Could be string, array of strings, or code
-      isCorrect: z.boolean().optional(),
-      fileUrl: z.string().optional(),
+      answer: z.any(),
+      isCorrect: z.boolean(),
+      points: z.number().default(0),
+      feedback: z.string().optional(),
     })
   ),
-  status: z.enum(["pending", "in-progress", "completed", "overdue"]).optional(),
+  status: z.enum(["pending", "in-progress", "completed", "overdue"]).default("completed"),
   score: z.number(),
   maxScore: z.number(),
   submittedAt: z.date(),
+  studentName: z.string(),
+  title: z.string(),
+  timeSpent: z.number().optional(), // in minutes
 });
 
 // Insert schemas (for creating new records)

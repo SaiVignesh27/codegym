@@ -21,20 +21,46 @@ export default function AssignmentView() {
 
   const submitAssignment = useMutation({
     mutationFn: async () => {
+      if (!assignment) throw new Error('Assignment not found');
+
+      // Calculate score
+      const questionResults = assignment.questions.map((question, index) => {
+        const answer = answers[question._id || index.toString()];
+        const isCorrect = answer === question.correctAnswer;
+        const points = isCorrect ? (question.points || 1) : 0;
+        return {
+          questionId: question._id || index.toString(),
+          answer,
+          isCorrect,
+          points,
+        };
+      });
+
+      const totalPoints = questionResults.reduce((sum, q) => sum + q.points, 0);
+      const maxPoints = assignment.questions.reduce((sum, q) => sum + (q.points || 1), 0);
+      const scorePercentage = (totalPoints / maxPoints) * 100;
+
       const response = await fetch(`/api/student/results`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           assignmentId: id,
-          answers,
-          submittedAt: new Date()
+          courseId: assignment.courseId,
+          type: 'assignment',
+          answers: questionResults,
+          score: scorePercentage,
+          maxScore: maxPoints,
+          submittedAt: new Date(),
+          title: assignment.title
         }),
       });
+      
       if (!response.ok) throw new Error('Failed to submit assignment');
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/student/assignments/${id}`] });
+      queryClient.setQueryData([`/api/student/assignments/${id}/results`], data);
       setLocation(`/student/assignments/${id}/results`);
     },
   });

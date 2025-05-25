@@ -52,20 +52,47 @@ export default function TestView() {
 
   const submitTest = useMutation({
     mutationFn: async () => {
+      if (!test) throw new Error('Test not found');
+      
+      // Calculate score
+      const questionResults = test.questions.map((question, index) => {
+        const answer = answers[question._id || index.toString()];
+        const isCorrect = answer === question.correctAnswer;
+        const points = isCorrect ? (question.points || 1) : 0;
+        return {
+          questionId: question._id || index.toString(),
+          answer,
+          isCorrect,
+          points,
+        };
+      });
+
+      const totalPoints = questionResults.reduce((sum, q) => sum + q.points, 0);
+      const maxPoints = test.questions.reduce((sum, q) => sum + (q.points || 1), 0);
+      const scorePercentage = (totalPoints / maxPoints) * 100;
+
       const response = await fetch(`/api/student/results`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           testId: id,
-          answers,
-          submittedAt: new Date()
+          courseId: test.courseId,
+          type: 'test',
+          answers: questionResults,
+          score: scorePercentage,
+          maxScore: maxPoints,
+          submittedAt: new Date(),
+          title: test.title,
+          timeSpent: test.timeLimit ? (test.timeLimit * 60 - timeLeft!) : undefined
         }),
       });
+
       if (!response.ok) throw new Error('Failed to submit test');
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/student/tests/${id}`] });
+      queryClient.setQueryData([`/api/student/tests/${id}/results`], data);
       setLocation(`/student/tests/${id}/results`);
     },
   });
