@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import StudentLayout from '@/components/layout/StudentLayout';
-import { Test, Result } from '@shared/schema';
-import { Link } from 'wouter';
-import { format } from 'date-fns';
+import React, { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import StudentLayout from "@/components/layout/StudentLayout";
+import { Test, Result } from "@shared/schema";
+import { Link } from "wouter";
+import { format } from "date-fns";
 
 import {
   Card,
@@ -12,33 +12,28 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { 
-  FileQuestion, 
-  Loader2, 
-  Clock, 
-  Search, 
-  ChevronRight, 
-  CheckCircle, 
+} from "@/components/ui/select";
+import {
+  FileQuestion,
+  Loader2,
+  Clock,
+  Search,
+  ChevronRight,
+  CheckCircle,
   Star,
-  Calendar
-} from 'lucide-react';
+  Calendar,
+} from "lucide-react";
 
 // Interface for test with result
 interface TestWithResult extends Test {
@@ -48,30 +43,30 @@ interface TestWithResult extends Test {
 }
 
 export default function DailyTests() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [courseFilter, setCourseFilter] = useState('all');
-  
+  const [searchQuery, setSearchQuery] = useState("");
+  const [courseFilter, setCourseFilter] = useState("all");
+
   // Fetch available tests
   const { data: tests, isLoading: isLoadingTests } = useQuery<Test[]>({
-    queryKey: ['/api/student/tests'],
+    queryKey: ["/api/student/tests"],
   });
-  
+
   // Fetch test results
   const { data: results, isLoading: isLoadingResults } = useQuery<Result[]>({
-    queryKey: ['/api/student/results/tests'],
+    queryKey: ["/api/student/results/tests"],
   });
-  
+
   // Fetch courses for filter
   const { data: courses, isLoading: isLoadingCourses } = useQuery({
-    queryKey: ['/api/student/courses'],
+    queryKey: ["/api/student/courses"],
   });
-  
+
   // Process tests with results
   const testsWithResults: TestWithResult[] = React.useMemo(() => {
     if (!tests || !results) return [];
-    
-    return tests.map(test => {
-      const result = results.find(r => r.testId === test._id);
+
+    return tests.map((test) => {
+      const result = results.find((r) => r.testId === test._id);
       return {
         ...test,
         result,
@@ -80,40 +75,47 @@ export default function DailyTests() {
       };
     });
   }, [tests, results]);
-  
+
   // Filter tests by search and course
   const filteredTests = React.useMemo(() => {
-    return testsWithResults.filter(test => {
-      const matchesSearch = test.title.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCourse = courseFilter === 'all' || test.courseId === courseFilter;
+    return testsWithResults.filter((test) => {
+      const matchesSearch = test.title
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase());
+      const matchesCourse =
+        courseFilter === "all" || test.courseId === courseFilter;
       return matchesSearch && matchesCourse;
     });
   }, [testsWithResults, searchQuery, courseFilter]);
-  
+
   // Split tests into pending and completed
-  const pendingTests = filteredTests.filter(test => !test.isCompleted);
-  const completedTests = filteredTests.filter(test => test.isCompleted);
-  
+  const pendingTests = filteredTests.filter((test) => !test.isCompleted);
+  const completedTests = filteredTests.filter((test) => test.isCompleted);
+
   // Check if all data is loading
   const isLoading = isLoadingTests || isLoadingResults || isLoadingCourses;
-  
+
   // Format date
   const formatDate = (date: Date) => {
-    return format(date, 'MMM dd, yyyy');
+    return format(date, "MMM dd, yyyy");
   };
-  
+
   // Get course name
   const getCourseName = (courseId: string) => {
-    const course = courses?.find(c => c._id === courseId);
-    return course?.title || 'Unknown Course';
+    const course = courses?.find((c) => c._id === courseId);
+    return course?.title || "Unknown Course";
   };
 
   return (
     <StudentLayout>
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Daily Tests</h2>
-          <p className="text-gray-600 dark:text-gray-400">Practice and improve your skills with daily tests</p>
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-white">
+            Daily Tests
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400">
+            Practice and improve your skills with daily tests
+          </p>
         </div>
 
         <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4 items-start sm:items-center">
@@ -126,11 +128,8 @@ export default function DailyTests() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          
-          <Select
-            value={courseFilter}
-            onValueChange={setCourseFilter}
-          >
+
+          <Select value={courseFilter} onValueChange={setCourseFilter}>
             <SelectTrigger className="w-full sm:w-60">
               <SelectValue placeholder="Filter by course" />
             </SelectTrigger>
@@ -150,7 +149,7 @@ export default function DailyTests() {
             <TabsTrigger value="pending">Pending Tests</TabsTrigger>
             <TabsTrigger value="completed">Completed Tests</TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="pending" className="m-0">
             {isLoading ? (
               <div className="flex justify-center py-8">
@@ -170,12 +169,15 @@ export default function DailyTests() {
                           <span>{test.timeLimit || 30} min</span>
                         </div>
                       </div>
-                      <CardTitle className="mt-2 text-lg">{test.title}</CardTitle>
+                      <CardTitle className="mt-2 text-lg">
+                        {test.title}
+                      </CardTitle>
                       <CardDescription className="line-clamp-2">
-                        {test.description || 'Test your knowledge with this daily test.'}
+                        {test.description ||
+                          "Test your knowledge with this daily test."}
                       </CardDescription>
                     </CardHeader>
-                    
+
                     <CardContent>
                       <div className="flex items-center justify-between text-sm">
                         <div className="flex items-center">
@@ -187,12 +189,14 @@ export default function DailyTests() {
                         <div className="flex items-center">
                           <Calendar className="h-4 w-4 mr-1 text-gray-500 dark:text-gray-400" />
                           <span className="text-gray-500 dark:text-gray-400">
-                            {test.createdAt ? formatDate(new Date(test.createdAt)) : 'Available now'}
+                            {test.createdAt
+                              ? formatDate(new Date(test.createdAt))
+                              : "Available now"}
                           </span>
                         </div>
                       </div>
                     </CardContent>
-                    
+
                     <CardFooter className="border-t bg-gray-50 dark:bg-dark-border pt-4">
                       <Button asChild className="w-full">
                         <Link href={`/student/daily-tests/${test._id}`}>
@@ -207,11 +211,13 @@ export default function DailyTests() {
               <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                 <FileQuestion className="h-12 w-12 mx-auto mb-4 opacity-20" />
                 <h3 className="text-lg font-medium">No pending tests found</h3>
-                <p className="text-sm">All tests have been completed or none are available</p>
+                <p className="text-sm">
+                  All tests have been completed or none are available
+                </p>
               </div>
             )}
           </TabsContent>
-          
+
           <TabsContent value="completed" className="m-0">
             {isLoading ? (
               <div className="flex justify-center py-8">
@@ -226,40 +232,48 @@ export default function DailyTests() {
                         <CheckCircle className="h-3 w-3 mr-1" /> Completed
                       </Badge>
                     </div>
-                    
+
                     <CardHeader className="pb-2">
                       <Badge className="bg-primary-light bg-opacity-10 text-primary">
                         {getCourseName(test.courseId)}
                       </Badge>
-                      <CardTitle className="mt-2 text-lg">{test.title}</CardTitle>
+                      <CardTitle className="mt-2 text-lg">
+                        {test.title}
+                      </CardTitle>
                       <CardDescription className="line-clamp-2">
-                        {test.description || 'Test your knowledge with this daily test.'}
+                        {test.description ||
+                          "Test your knowledge with this daily test."}
                       </CardDescription>
                     </CardHeader>
-                    
+
                     <CardContent>
                       <div className="bg-gray-50 dark:bg-dark-border rounded-lg p-4 mb-4">
                         <div className="flex justify-between items-center mb-2">
-                          <span className="text-sm text-gray-500 dark:text-gray-400">Your Score</span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                            Your Score
+                          </span>
                           <div className="flex items-center">
-                            <Star className="h-4 w-4 text-yellow-500 mr-1" fill="currentColor" />
+                            <Star
+                              className="h-4 w-4 text-yellow-500 mr-1"
+                              fill="currentColor"
+                            />
                             <span className="font-semibold">{test.score}%</span>
                           </div>
                         </div>
                         <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                          <div 
+                          <div
                             className={`h-full rounded-full ${
-                              (test.score || 0) >= 70 
-                                ? 'bg-green-500' 
-                                : (test.score || 0) >= 40 
-                                ? 'bg-yellow-500' 
-                                : 'bg-red-500'
+                              (test.score || 0) >= 70
+                                ? "bg-green-500"
+                                : (test.score || 0) >= 40
+                                  ? "bg-yellow-500"
+                                  : "bg-red-500"
                             }`}
                             style={{ width: `${test.score || 0}%` }}
                           ></div>
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center justify-between text-sm">
                         <div className="flex items-center">
                           <FileQuestion className="h-4 w-4 mr-1 text-gray-500 dark:text-gray-400" />
@@ -270,14 +284,14 @@ export default function DailyTests() {
                         <div className="flex items-center">
                           <Calendar className="h-4 w-4 mr-1 text-gray-500 dark:text-gray-400" />
                           <span className="text-gray-500 dark:text-gray-400">
-                            {test.result?.submittedAt 
-                              ? formatDate(new Date(test.result.submittedAt)) 
-                              : 'Completed'}
+                            {test.result?.submittedAt
+                              ? formatDate(new Date(test.result.submittedAt))
+                              : "Completed"}
                           </span>
                         </div>
                       </div>
                     </CardContent>
-                    
+
                     <CardFooter className="border-t bg-gray-50 dark:bg-dark-border pt-4">
                       <Button asChild variant="outline" className="w-full">
                         <Link href={`/student/daily-tests/${test._id}/results`}>
@@ -291,7 +305,9 @@ export default function DailyTests() {
             ) : (
               <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                 <FileQuestion className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                <h3 className="text-lg font-medium">No completed tests found</h3>
+                <h3 className="text-lg font-medium">
+                  No completed tests found
+                </h3>
                 <p className="text-sm">Complete some tests to see them here</p>
               </div>
             )}
