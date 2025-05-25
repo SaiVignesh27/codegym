@@ -282,6 +282,704 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Admin User Management Endpoints
+  app.get('/api/admin/users', async (req, res) => {
+    try {
+      const role = req.query.role as 'admin' | 'student' | undefined;
+      const users = await mongoStorage.listUsers(role);
+      
+      // Don't send passwords
+      const sanitizedUsers = users.map(user => {
+        const { password, ...userWithoutPassword } = user;
+        return userWithoutPassword;
+      });
+      
+      res.json(sanitizedUsers);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.post('/api/admin/users', async (req, res) => {
+    try {
+      const userData = req.body;
+      const newUser = await mongoStorage.createUser(userData);
+      
+      // Don't send password
+      const { password, ...userWithoutPassword } = newUser;
+      
+      res.status(201).json(userWithoutPassword);
+    } catch (error) {
+      console.error('Error creating user:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/admin/users/:id', async (req, res) => {
+    try {
+      const userId = req.params.id;
+      const user = await mongoStorage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Don't send password
+      const { password, ...userWithoutPassword } = user;
+      
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.patch('/api/admin/users/:id', async (req, res) => {
+    try {
+      const userId = req.params.id;
+      const userData = req.body;
+      
+      const updatedUser = await mongoStorage.updateUser(userId, userData);
+      
+      if (!updatedUser) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Don't send password
+      const { password, ...userWithoutPassword } = updatedUser;
+      
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error('Error updating user:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.delete('/api/admin/users/:id', async (req, res) => {
+    try {
+      const userId = req.params.id;
+      const result = await mongoStorage.deleteUser(userId);
+      
+      if (!result) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  // Admin Course Management Endpoints
+  app.get('/api/admin/courses', async (req, res) => {
+    try {
+      const courses = await mongoStorage.listCourses();
+      res.json(courses);
+    } catch (error) {
+      console.error('Error fetching courses:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.post('/api/admin/courses', async (req, res) => {
+    try {
+      const courseData = req.body;
+      const newCourse = await mongoStorage.createCourse(courseData);
+      res.status(201).json(newCourse);
+    } catch (error) {
+      console.error('Error creating course:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/admin/courses/:id', async (req, res) => {
+    try {
+      const courseId = req.params.id;
+      const course = await mongoStorage.getCourse(courseId);
+      
+      if (!course) {
+        return res.status(404).json({ error: 'Course not found' });
+      }
+      
+      res.json(course);
+    } catch (error) {
+      console.error('Error fetching course:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.patch('/api/admin/courses/:id', async (req, res) => {
+    try {
+      const courseId = req.params.id;
+      const courseData = req.body;
+      
+      const updatedCourse = await mongoStorage.updateCourse(courseId, courseData);
+      
+      if (!updatedCourse) {
+        return res.status(404).json({ error: 'Course not found' });
+      }
+      
+      res.json(updatedCourse);
+    } catch (error) {
+      console.error('Error updating course:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.delete('/api/admin/courses/:id', async (req, res) => {
+    try {
+      const courseId = req.params.id;
+      const result = await mongoStorage.deleteCourse(courseId);
+      
+      if (!result) {
+        return res.status(404).json({ error: 'Course not found' });
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error('Error deleting course:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  // Admin Class Management Endpoints
+  app.get('/api/admin/classes', async (req, res) => {
+    try {
+      const courseId = req.query.courseId as string | undefined;
+      const classes = await mongoStorage.listClasses({ courseId });
+      res.json(classes);
+    } catch (error) {
+      console.error('Error fetching classes:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.post('/api/admin/classes', async (req, res) => {
+    try {
+      const classData = req.body;
+      const newClass = await mongoStorage.createClass(classData);
+      res.status(201).json(newClass);
+    } catch (error) {
+      console.error('Error creating class:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/admin/classes/:id', async (req, res) => {
+    try {
+      const classId = req.params.id;
+      const classData = await mongoStorage.getClass(classId);
+      
+      if (!classData) {
+        return res.status(404).json({ error: 'Class not found' });
+      }
+      
+      res.json(classData);
+    } catch (error) {
+      console.error('Error fetching class:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.patch('/api/admin/classes/:id', async (req, res) => {
+    try {
+      const classId = req.params.id;
+      const classData = req.body;
+      
+      const updatedClass = await mongoStorage.updateClass(classId, classData);
+      
+      if (!updatedClass) {
+        return res.status(404).json({ error: 'Class not found' });
+      }
+      
+      res.json(updatedClass);
+    } catch (error) {
+      console.error('Error updating class:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.delete('/api/admin/classes/:id', async (req, res) => {
+    try {
+      const classId = req.params.id;
+      const result = await mongoStorage.deleteClass(classId);
+      
+      if (!result) {
+        return res.status(404).json({ error: 'Class not found' });
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error('Error deleting class:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  // Admin Test Management Endpoints
+  app.get('/api/admin/tests', async (req, res) => {
+    try {
+      const courseId = req.query.courseId as string | undefined;
+      const classId = req.query.classId as string | undefined;
+      
+      const tests = await mongoStorage.listTests({ courseId, classId });
+      res.json(tests);
+    } catch (error) {
+      console.error('Error fetching tests:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.post('/api/admin/tests', async (req, res) => {
+    try {
+      const testData = req.body;
+      const newTest = await mongoStorage.createTest(testData);
+      res.status(201).json(newTest);
+    } catch (error) {
+      console.error('Error creating test:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/admin/tests/:id', async (req, res) => {
+    try {
+      const testId = req.params.id;
+      const test = await mongoStorage.getTest(testId);
+      
+      if (!test) {
+        return res.status(404).json({ error: 'Test not found' });
+      }
+      
+      res.json(test);
+    } catch (error) {
+      console.error('Error fetching test:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.patch('/api/admin/tests/:id', async (req, res) => {
+    try {
+      const testId = req.params.id;
+      const testData = req.body;
+      
+      const updatedTest = await mongoStorage.updateTest(testId, testData);
+      
+      if (!updatedTest) {
+        return res.status(404).json({ error: 'Test not found' });
+      }
+      
+      res.json(updatedTest);
+    } catch (error) {
+      console.error('Error updating test:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.delete('/api/admin/tests/:id', async (req, res) => {
+    try {
+      const testId = req.params.id;
+      const result = await mongoStorage.deleteTest(testId);
+      
+      if (!result) {
+        return res.status(404).json({ error: 'Test not found' });
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error('Error deleting test:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  // Admin Assignment Management Endpoints
+  app.get('/api/admin/assignments', async (req, res) => {
+    try {
+      const courseId = req.query.courseId as string | undefined;
+      
+      const assignments = await mongoStorage.listAssignments({ courseId });
+      res.json(assignments);
+    } catch (error) {
+      console.error('Error fetching assignments:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.post('/api/admin/assignments', async (req, res) => {
+    try {
+      const assignmentData = req.body;
+      const newAssignment = await mongoStorage.createAssignment(assignmentData);
+      res.status(201).json(newAssignment);
+    } catch (error) {
+      console.error('Error creating assignment:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/admin/assignments/:id', async (req, res) => {
+    try {
+      const assignmentId = req.params.id;
+      const assignment = await mongoStorage.getAssignment(assignmentId);
+      
+      if (!assignment) {
+        return res.status(404).json({ error: 'Assignment not found' });
+      }
+      
+      res.json(assignment);
+    } catch (error) {
+      console.error('Error fetching assignment:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.patch('/api/admin/assignments/:id', async (req, res) => {
+    try {
+      const assignmentId = req.params.id;
+      const assignmentData = req.body;
+      
+      const updatedAssignment = await mongoStorage.updateAssignment(assignmentId, assignmentData);
+      
+      if (!updatedAssignment) {
+        return res.status(404).json({ error: 'Assignment not found' });
+      }
+      
+      res.json(updatedAssignment);
+    } catch (error) {
+      console.error('Error updating assignment:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.delete('/api/admin/assignments/:id', async (req, res) => {
+    try {
+      const assignmentId = req.params.id;
+      const result = await mongoStorage.deleteAssignment(assignmentId);
+      
+      if (!result) {
+        return res.status(404).json({ error: 'Assignment not found' });
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error('Error deleting assignment:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  // Admin Result Management Endpoints
+  app.get('/api/admin/results', async (req, res) => {
+    try {
+      const studentId = req.query.studentId as string | undefined;
+      const courseId = req.query.courseId as string | undefined;
+      const testId = req.query.testId as string | undefined;
+      const assignmentId = req.query.assignmentId as string | undefined;
+      
+      const results = await mongoStorage.listResults({ 
+        studentId, 
+        courseId, 
+        testId, 
+        assignmentId 
+      });
+      
+      res.json(results);
+    } catch (error) {
+      console.error('Error fetching results:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.post('/api/admin/results', async (req, res) => {
+    try {
+      const resultData = req.body;
+      const newResult = await mongoStorage.createResult(resultData);
+      res.status(201).json(newResult);
+    } catch (error) {
+      console.error('Error creating result:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  // Student Endpoints
+  app.get('/api/student/tests', async (req, res) => {
+    try {
+      const courseId = req.query.courseId as string | undefined;
+      const tests = await mongoStorage.listTests({ 
+        visibility: 'public',
+        courseId
+      });
+      
+      // Add status information
+      const testsWithStatus = tests.map(test => ({
+        ...test,
+        status: Math.random() > 0.5 ? 'completed' : 'pending',
+        questions: test.questions ? test.questions.length : 0
+      }));
+      
+      res.json(testsWithStatus);
+    } catch (error) {
+      console.error('Error fetching student tests:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/student/tests/:id', async (req, res) => {
+    try {
+      const testId = req.params.id;
+      const test = await mongoStorage.getTest(testId);
+      
+      if (!test) {
+        return res.status(404).json({ error: 'Test not found' });
+      }
+      
+      if (test.visibility !== 'public') {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      
+      res.json(test);
+    } catch (error) {
+      console.error('Error fetching student test:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/student/assignments', async (req, res) => {
+    try {
+      const courseId = req.query.courseId as string | undefined;
+      const assignments = await mongoStorage.listAssignments({ 
+        visibility: 'public',
+        courseId
+      });
+      
+      // Add status information
+      const assignmentsWithStatus = assignments.map(assignment => ({
+        ...assignment,
+        status: Math.random() > 0.5 ? 'completed' : Math.random() > 0.5 ? 'in-progress' : 'pending',
+        dueDate: new Date(Date.now() + Math.floor(Math.random() * 10 + 1) * 24 * 60 * 60 * 1000)
+      }));
+      
+      res.json(assignmentsWithStatus);
+    } catch (error) {
+      console.error('Error fetching student assignments:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/student/assignments/:id', async (req, res) => {
+    try {
+      const assignmentId = req.params.id;
+      const assignment = await mongoStorage.getAssignment(assignmentId);
+      
+      if (!assignment) {
+        return res.status(404).json({ error: 'Assignment not found' });
+      }
+      
+      if (assignment.visibility !== 'public') {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      
+      res.json(assignment);
+    } catch (error) {
+      console.error('Error fetching student assignment:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/student/classes', async (req, res) => {
+    try {
+      const courseId = req.query.courseId as string | undefined;
+      const classes = await mongoStorage.listClasses({ 
+        visibility: 'public',
+        courseId
+      });
+      
+      res.json(classes);
+    } catch (error) {
+      console.error('Error fetching student classes:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/student/classes/:id', async (req, res) => {
+    try {
+      const classId = req.params.id;
+      const classData = await mongoStorage.getClass(classId);
+      
+      if (!classData) {
+        return res.status(404).json({ error: 'Class not found' });
+      }
+      
+      if (classData.visibility !== 'public') {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      
+      res.json(classData);
+    } catch (error) {
+      console.error('Error fetching student class:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/student/results', async (req, res) => {
+    try {
+      // Get the current student ID from auth token (in a real app)
+      // For now, we'll use the demo student ID
+      const student = await mongoStorage.getUserByEmail('student@codegym.com');
+      if (!student) {
+        return res.status(404).json({ error: 'Student not found' });
+      }
+      
+      const studentId = student._id;
+      const results = await mongoStorage.listResults({ studentId });
+      
+      res.json(results);
+    } catch (error) {
+      console.error('Error fetching student results:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.post('/api/student/results', async (req, res) => {
+    try {
+      // Get the current student ID from auth token (in a real app)
+      // For now, we'll use the demo student ID
+      const student = await mongoStorage.getUserByEmail('student@codegym.com');
+      if (!student) {
+        return res.status(404).json({ error: 'Student not found' });
+      }
+      
+      const resultData = {
+        ...req.body,
+        studentId: student._id,
+        submittedAt: new Date()
+      };
+      
+      const newResult = await mongoStorage.createResult(resultData);
+      res.status(201).json(newResult);
+    } catch (error) {
+      console.error('Error creating student result:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/student/leaderboard', async (req, res) => {
+    try {
+      // Get results
+      const results = await mongoStorage.listResults();
+      
+      // Group by student and calculate total scores
+      const leaderboardMap = new Map();
+      
+      for (const result of results) {
+        if (!leaderboardMap.has(result.studentId)) {
+          const student = await mongoStorage.getUser(result.studentId);
+          leaderboardMap.set(result.studentId, {
+            studentId: result.studentId,
+            studentName: student ? student.name : 'Unknown Student',
+            score: result.score || 0,
+            completedAt: result.submittedAt || new Date()
+          });
+        } else {
+          const entry = leaderboardMap.get(result.studentId);
+          entry.score += (result.score || 0);
+          if (result.submittedAt && (!entry.completedAt || result.submittedAt > entry.completedAt)) {
+            entry.completedAt = result.submittedAt;
+          }
+        }
+      }
+      
+      // Create mock leaderboard if no results exist
+      if (leaderboardMap.size === 0) {
+        const leaderboard = [
+          {
+            studentId: '1',
+            studentName: 'Alex Johnson',
+            score: 950,
+            completedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
+          },
+          {
+            studentId: '2',
+            studentName: 'Maria Garcia',
+            score: 920,
+            completedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
+          },
+          {
+            studentId: '3',
+            studentName: 'Student User',
+            score: 880,
+            completedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000)
+          },
+          {
+            studentId: '4',
+            studentName: 'James Wilson',
+            score: 850,
+            completedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000)
+          },
+          {
+            studentId: '5',
+            studentName: 'Sarah Lee',
+            score: 820,
+            completedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
+          }
+        ];
+        
+        res.json(leaderboard);
+      } else {
+        // Convert map to array, sort by score descending
+        const leaderboard = Array.from(leaderboardMap.values())
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 10); // Top 10
+        
+        res.json(leaderboard);
+      }
+    } catch (error) {
+      console.error('Error fetching leaderboard:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  app.get('/api/student/progress', async (req, res) => {
+    try {
+      // Get the current student ID from auth token (in a real app)
+      // For now, we'll use the demo student ID
+      const student = await mongoStorage.getUserByEmail('student@codegym.com');
+      if (!student) {
+        return res.status(404).json({ error: 'Student not found' });
+      }
+      
+      // In a real app, calculate this from actual student activity
+      const progress = {
+        overall: 65,
+        courses: {
+          completed: 2,
+          inProgress: 3,
+          total: 5
+        },
+        tests: {
+          completed: 12,
+          pending: 5,
+          average: 85
+        },
+        assignments: {
+          completed: 8,
+          pending: 4,
+          average: 88
+        },
+        skills: {
+          javascript: 85,
+          react: 70,
+          nodejs: 60,
+          database: 55,
+          problemSolving: 80
+        }
+      };
+      
+      res.json(progress);
+    } catch (error) {
+      console.error('Error fetching student progress:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
   // Authentication routes
   app.post('/api/auth/admin/login', async (req, res) => {
     try {

@@ -11,6 +11,10 @@ export async function loginUser(credentials: LoginCredentials, role: 'admin' | '
   localStorage.setItem('token', data.token);
   localStorage.setItem('user', JSON.stringify(data.user));
   
+  // Redirect to the appropriate dashboard based on role
+  const redirectUrl = role === 'admin' ? '/admin/dashboard' : '/student/dashboard';
+  window.location.href = redirectUrl;
+  
   return data;
 }
 
