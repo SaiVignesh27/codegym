@@ -923,8 +923,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/student/results', async (req, res) => {
     try {
-      // Get the current student ID from auth token (in a real app)
-      // For now, we'll use the demo student ID
       const student = await mongoStorage.getUserByEmail('student@codegym.com');
       if (!student) {
         return res.status(404).json({ error: 'Student not found' });
@@ -936,6 +934,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(results);
     } catch (error) {
       console.error('Error fetching student results:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.get('/api/student/tests/:id/results', async (req, res) => {
+    try {
+      const testId = req.params.id;
+      const student = await mongoStorage.getUserByEmail('student@codegym.com');
+      if (!student) {
+        return res.status(404).json({ error: 'Student not found' });
+      }
+
+      const test = await mongoStorage.getTest(testId);
+      if (!test) {
+        return res.status(404).json({ error: 'Test not found' });
+      }
+
+      const result = await mongoStorage.listResults({ 
+        studentId: student._id,
+        testId 
+      }).then(results => results[0]);
+
+      if (!result) {
+        return res.status(404).json({ error: 'Result not found' });
+      }
+
+      res.json({ test, result });
+    } catch (error) {
+      console.error('Error fetching test results:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.get('/api/student/assignments/:id/results', async (req, res) => {
+    try {
+      const assignmentId = req.params.id;
+      const student = await mongoStorage.getUserByEmail('student@codegym.com');
+      if (!student) {
+        return res.status(404).json({ error: 'Student not found' });
+      }
+
+      const assignment = await mongoStorage.getAssignment(assignmentId);
+      if (!assignment) {
+        return res.status(404).json({ error: 'Assignment not found' });
+      }
+
+      const result = await mongoStorage.listResults({ 
+        studentId: student._id,
+        assignmentId 
+      }).then(results => results[0]);
+
+      if (!result) {
+        return res.status(404).json({ error: 'Result not found' });
+      }
+
+      res.json({ assignment, result });
+    } catch (error) {
+      console.error('Error fetching assignment results:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   });

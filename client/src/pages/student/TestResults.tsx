@@ -1,9 +1,9 @@
 
 import React from 'react';
-import { useParams, Link } from 'wouter';
+import { useParams, Link, useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import StudentLayout from '@/components/layout/StudentLayout';
-import { Test, Result } from '@shared/schema';
+import { Test, Assignment, Result } from '@shared/schema';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -11,9 +11,11 @@ import { Loader2, ArrowLeft, CheckCircle, XCircle } from 'lucide-react';
 
 export default function TestResults() {
   const { id } = useParams();
+  const [location] = useLocation();
+  const isAssignment = location.includes('assignments');
   
-  const { data: testResult, isLoading } = useQuery<{ test: Test; result: Result }>({
-    queryKey: [`/api/student/tests/${id}/results`],
+  const { data: resultData, isLoading } = useQuery({
+    queryKey: [`/api/student/${isAssignment ? 'assignments' : 'tests'}/${id}/results`],
   });
 
   if (isLoading) {
@@ -26,23 +28,26 @@ export default function TestResults() {
     );
   }
 
-  if (!testResult) {
+  if (!resultData) {
     return (
       <StudentLayout>
         <div className="text-center py-12">
           <h2 className="text-2xl font-bold mb-2">Results Not Found</h2>
           <p className="text-gray-600 dark:text-gray-400 mb-6">
-            The test results you're looking for don't exist or you don't have access to them.
+            The results you're looking for don't exist or you don't have access to them.
           </p>
           <Button asChild>
-            <Link href="/student/tests">Back to Tests</Link>
+            <Link href={isAssignment ? "/student/assignments" : "/student/tests"}>
+              Back to {isAssignment ? "Assignments" : "Tests"}
+            </Link>
           </Button>
         </div>
       </StudentLayout>
     );
   }
 
-  const { test, result } = testResult;
+  const item = isAssignment ? resultData.assignment : resultData.test;
+  const { result } = resultData;
 
   return (
     <StudentLayout>
@@ -50,12 +55,12 @@ export default function TestResults() {
         <div className="flex items-center justify-between">
           <div>
             <Button variant="outline" asChild className="mb-4">
-              <Link href={`/student/courses/${test.courseId}`}>
+              <Link href={`/student/courses/${item.courseId}`}>
                 <ArrowLeft className="h-4 w-4 mr-2" /> Back to Course
               </Link>
             </Button>
-            <h2 className="text-2xl font-bold">{test.title} Results</h2>
-            <p className="text-gray-600 dark:text-gray-400">{test.description}</p>
+            <h2 className="text-2xl font-bold">{item.title} Results</h2>
+            <p className="text-gray-600 dark:text-gray-400">{item.description}</p>
           </div>
         </div>
 
@@ -63,7 +68,7 @@ export default function TestResults() {
           <CardHeader>
             <CardTitle>Your Score</CardTitle>
             <CardDescription>
-              You scored {result.score}% on this test
+              You scored {result.score}% on this {isAssignment ? 'assignment' : 'test'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -75,9 +80,9 @@ export default function TestResults() {
         </Card>
 
         <div className="space-y-6">
-          {test.questions?.map((question, index) => {
-            const userAnswer = result.answers[question._id || index.toString()];
-            const isCorrect = userAnswer === question.correctAnswer;
+          {item.questions?.map((question, index) => {
+            const answer = result.answers.find(a => a.questionId === (question._id || index.toString()));
+            const isCorrect = answer?.isCorrect;
 
             return (
               <Card key={index}>
@@ -93,22 +98,29 @@ export default function TestResults() {
                 </CardHeader>
                 <CardContent>
                   <p className="mb-4">{question.text}</p>
-                  <div className="space-y-2">
-                    {question.options?.map((option, optIndex) => (
-                      <div
-                        key={optIndex}
-                        className={`p-2 rounded ${
-                          option === question.correctAnswer
-                            ? 'bg-green-100 dark:bg-green-900'
-                            : option === userAnswer
-                            ? 'bg-red-100 dark:bg-red-900'
-                            : 'bg-gray-100 dark:bg-gray-800'
-                        }`}
-                      >
-                        {option}
-                      </div>
-                    ))}
-                  </div>
+                  {question.options ? (
+                    <div className="space-y-2">
+                      {question.options.map((option, optIndex) => (
+                        <div
+                          key={optIndex}
+                          className={`p-2 rounded ${
+                            option === question.correctAnswer
+                              ? 'bg-green-100 dark:bg-green-900'
+                              : option === answer?.answer
+                              ? 'bg-red-100 dark:bg-red-900'
+                              : 'bg-gray-100 dark:bg-gray-800'
+                          }`}
+                        >
+                          {option}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded">
+                      <p className="font-medium mb-2">Your Answer:</p>
+                      <p>{answer?.answer || 'No answer provided'}</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );
