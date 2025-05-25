@@ -20,11 +20,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin Dashboard Endpoints
   app.get('/api/admin/dashboard/stats', async (req, res) => {
     try {
-      // Get counts from storage
-      const users = await storage.listUsers('student');
-      const courses = await storage.listCourses();
-      const tests = await storage.listTests();
-      const assignments = await storage.listAssignments();
+      // Get counts from MongoDB storage
+      const users = await mongoStorage.listUsers('student');
+      const courses = await mongoStorage.listCourses();
+      const tests = await mongoStorage.listTests();
+      const assignments = await mongoStorage.listAssignments();
       
       const stats = {
         students: users.length,
@@ -42,7 +42,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get('/api/admin/courses/recent', async (req, res) => {
     try {
-      const courses = await storage.listCourses();
+      const courses = await mongoStorage.listCourses();
       // Sort by creation date (newest first) and limit to 5
       const recentCourses = courses
         .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))
@@ -57,7 +57,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get('/api/admin/tests/recent', async (req, res) => {
     try {
-      const tests = await storage.listTests();
+      const tests = await mongoStorage.listTests();
       // Sort by creation date (newest first) and limit to 5
       const recentTests = tests
         .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))
@@ -122,7 +122,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Student Dashboard Endpoints
   app.get('/api/student/courses', async (req, res) => {
     try {
-      const courses = await storage.listCourses({ visibility: 'public' });
+      const courses = await mongoStorage.listCourses({ visibility: 'public' });
       
       // Add progress information for each course
       const coursesWithProgress = courses.map(course => ({
@@ -143,7 +143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get('/api/student/tests/upcoming', async (req, res) => {
     try {
-      const tests = await storage.listTests({ visibility: 'public' });
+      const tests = await mongoStorage.listTests({ visibility: 'public' });
       
       // Add additional information for display
       const upcomingTests = tests.slice(0, 3).map(test => ({
@@ -161,7 +161,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get('/api/student/assignments/pending', async (req, res) => {
     try {
-      const assignments = await storage.listAssignments({ visibility: 'public' });
+      const assignments = await mongoStorage.listAssignments({ visibility: 'public' });
       
       // Add due dates and status
       const pendingAssignments = assignments.slice(0, 3).map(assignment => ({
@@ -247,7 +247,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/student/profile', async (req, res) => {
     try {
       // Get the student user
-      const student = await storage.getUserByEmail('student@codegym.com');
+      const student = await mongoStorage.getUserByEmail('student@codegym.com');
       
       if (!student) {
         return res.status(404).json({ error: 'Student not found' });
@@ -266,7 +266,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/admin/profile', async (req, res) => {
     try {
       // Get the admin user
-      const admin = await storage.getUserByEmail('admin@codegym.com');
+      const admin = await mongoStorage.getUserByEmail('admin@codegym.com');
       
       if (!admin) {
         return res.status(404).json({ error: 'Admin not found' });
