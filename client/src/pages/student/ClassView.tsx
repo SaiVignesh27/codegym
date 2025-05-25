@@ -1,12 +1,12 @@
 
 import React from 'react';
-import { useParams } from 'wouter';
+import { useParams, Link } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import StudentLayout from '@/components/layout/StudentLayout';
 import { Class } from '@shared/schema';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, FileVideo, FileText } from 'lucide-react';
+import { Loader2, FileVideo, FileText, ArrowLeft } from 'lucide-react';
 
 export default function ClassView() {
   const { id } = useParams();
@@ -34,7 +34,7 @@ export default function ClassView() {
             The class you're looking for doesn't exist or you don't have access to it.
           </p>
           <Button asChild>
-            <a href="/student/courses">Back to Courses</a>
+            <Link href="/student/courses">Back to Courses</Link>
           </Button>
         </div>
       </StudentLayout>
@@ -44,21 +44,28 @@ export default function ClassView() {
   return (
     <StudentLayout>
       <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold">{classData.title}</h2>
-          <p className="text-gray-600 dark:text-gray-400">{classData.description}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <Button variant="outline" asChild className="mb-4">
+              <Link href={`/student/courses/${classData.courseId}`}>
+                <ArrowLeft className="h-4 w-4 mr-2" /> Back to Course
+              </Link>
+            </Button>
+            <h2 className="text-2xl font-bold">{classData.title}</h2>
+            <p className="text-gray-600 dark:text-gray-400">{classData.description}</p>
+          </div>
         </div>
 
         <Card>
           <CardHeader>
             <CardTitle>Class Content</CardTitle>
             <CardDescription>
-              {classData.content.type === 'video' ? 'Video Lecture' : 'Document Material'}
+              {classData.content?.type === 'video' ? 'Video Lecture' : 'Document Material'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {classData.content.type === 'video' ? (
-              <div className="aspect-video">
+            {classData.content?.type === 'video' ? (
+              <div className="aspect-video rounded-lg overflow-hidden">
                 <iframe
                   src={classData.content.url}
                   className="w-full h-full"
@@ -66,7 +73,7 @@ export default function ClassView() {
                   allowFullScreen
                 />
               </div>
-            ) : (
+            ) : classData.content?.type === 'document' ? (
               <div className="p-4 border rounded-lg">
                 <a 
                   href={classData.content.url} 
@@ -77,6 +84,10 @@ export default function ClassView() {
                   <FileText className="h-5 w-5 mr-2" />
                   View Document
                 </a>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                No content available for this class
               </div>
             )}
           </CardContent>
