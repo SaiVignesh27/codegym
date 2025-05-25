@@ -63,6 +63,7 @@ function Router() {
       <Route path="/student/dashboard" component={StudentDashboard} />
       <Route path="/student/courses" component={StudentCourses} />
       <Route path="/student/courses/:id" component={CourseDetail} />
+<Route path="/student/classes/:id" component={() => import('./pages/student/ClassView')} />
       <Route path="/student/daily-tests" component={StudentDailyTests} />
       <Route path="/student/assignments" component={StudentAssignments} />
       <Route path="/student/leaderboard" component={StudentLeaderboard} />

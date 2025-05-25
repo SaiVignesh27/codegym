@@ -376,9 +376,9 @@ export default function CourseDetail() {
                             </Button>
                           )}
                           <Button size="sm" asChild>
-                            <a href={`/student/classes/${classItem._id}`}>
+                            <Link href={`/student/classes/${classItem._id}`}>
                               View Class <ArrowRight className="ml-2 h-4 w-4" />
-                            </a>
+                            </Link>
                           </Button>
                         </div>
                       </div>
