@@ -22,8 +22,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    if (user.role !== 'admin') {
-      return res.status(403).json({ error: 'Access denied. Not an admin account.' });
+    if (user.role !== 'student') {
+      return res.status(403).json({ error: 'Access denied. Not a student account.' });
     }
 
     const isValidPassword = await bcrypt.compare(password, user.password);
@@ -31,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const token = 'admin-token-' + Date.now();
+    const token = 'student-token-' + Date.now();
 
     return res.json({
       user: {
@@ -43,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       token
     });
   } catch (error) {
-    console.error('Admin login error:', error);
+    console.error('Student login error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 } 
