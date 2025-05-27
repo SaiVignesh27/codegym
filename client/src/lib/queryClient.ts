@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { getToken, getCurrentUser } from './auth';
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -7,20 +8,35 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-export async function apiRequest(
-  method: string,
-  url: string,
-  data?: unknown | undefined,
-): Promise<Response> {
-  const res = await fetch(url, {
+export async function apiRequest(method: string, endpoint: string, data?: any) {
+  const token = getToken();
+  const user = getCurrentUser();
+  
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  if (user?.email) {
+    headers['x-user-email'] = user.email;
+  }
+
+  const response = await fetch(`http://localhost:5000${endpoint}`, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
+    credentials: 'include'
   });
 
-  await throwIfResNotOk(res);
-  return res;
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Something went wrong' }));
+    throw new Error(error.error || 'Something went wrong');
+  }
+
+  return response;
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
@@ -29,8 +45,24 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey[0] as string, {
-      credentials: "include",
+    const token = getToken();
+    const user = getCurrentUser();
+    
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    if (user?.email) {
+      headers['x-user-email'] = user.email;
+    }
+
+    const res = await fetch(`http://localhost:5000${queryKey[0]}`, {
+      headers,
+      credentials: 'include'
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

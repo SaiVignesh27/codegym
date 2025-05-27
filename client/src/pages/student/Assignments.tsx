@@ -38,7 +38,8 @@ import {
   CheckCircle, 
   Star,
   Calendar,
-  AlertTriangle
+  AlertTriangle,
+  XCircle
 } from 'lucide-react';
 
 // Interface for assignment with result
@@ -79,18 +80,18 @@ export default function Assignments() {
       const isOverdue = isAfter(new Date(), dueDate) && !result;
       
       let status: 'pending' | 'in-progress' | 'completed' | 'overdue' = 'pending';
-      if (result?.status === 'completed') {
+      if (result) {
         status = 'completed';
       } else if (isOverdue) {
         status = 'overdue';
-      } else if (result?.status === 'in-progress') {
+      } else if (assignment.status === 'in-progress') {
         status = 'in-progress';
       }
       
       return {
         ...assignment,
         result,
-        isCompleted: result?.status === 'completed',
+        isCompleted: !!result,
         isOverdue,
         status,
         score: result?.score || 0,
@@ -137,6 +138,38 @@ export default function Assignments() {
   const getCourseName = (courseId: string) => {
     const course = courses.find(course => course._id === courseId);
     return course?.title || 'Unknown Course';
+  };
+
+  // Get status badge color
+  const getStatusColor = (status: 'pending' | 'in-progress' | 'completed' | 'overdue') => {
+    switch (status) {
+      case "completed":
+        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
+      case "in-progress":
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300";
+      case "pending":
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
+      case "overdue":
+        return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
+      default:
+        return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
+    }
+  };
+
+  // Get status icon
+  const getStatusIcon = (status: 'pending' | 'in-progress' | 'completed' | 'overdue') => {
+    switch (status) {
+      case "completed":
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case "in-progress":
+        return <Clock className="h-4 w-4 text-blue-500" />;
+      case "pending":
+        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
+      case "overdue":
+        return <XCircle className="h-4 w-4 text-red-500" />;
+      default:
+        return null;
+    }
   };
 
   return (
@@ -313,9 +346,9 @@ export default function Assignments() {
             ) : completedAssignments.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {completedAssignments.map((assignment) => (
-                  <Card key={assignment._id} className="overflow-hidden">
+                  <Card key={assignment._id} className="overflow-hidden relative">
                     <div className="absolute top-2 right-2">
-                      <Badge className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800">
+                      <Badge className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-300 flex items-center">
                         <CheckCircle className="h-3 w-3 mr-1" /> Completed
                       </Badge>
                     </div>
@@ -372,9 +405,9 @@ export default function Assignments() {
                     </CardContent>
                     
                     <CardFooter className="border-t bg-gray-50 dark:bg-dark-border pt-4">
-                      <Button asChild variant="outline" className="w-full">
+                      <Button asChild size="sm">
                         <Link href={`/student/assignments/${assignment._id}/results`}>
-                          View Results
+                          View Submission
                         </Link>
                       </Button>
                     </CardFooter>

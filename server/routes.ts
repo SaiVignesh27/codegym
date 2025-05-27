@@ -3,6 +3,52 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { mongoStorage } from "./index";
 import bcrypt from "bcrypt";
+import { CircleUser } from "lucide-react";
+
+// Add authentication middleware
+const authenticateUser = async (req: Request, res: Response, next: Function) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No authorization header' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    // In a real app, verify JWT token here
+    // For now, we'll just check if it's a valid token format
+    if (!token.startsWith('student-token-') && !token.startsWith('admin-token-')) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    // Get user from token (in a real app, decode JWT)
+    const userEmail = req.headers['x-user-email'] as string;
+    if (!userEmail) {
+      return res.status(401).json({ error: 'No user email in request' });
+    }
+
+    const user = await mongoStorage.getUserByEmail(userEmail);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    // Verify token matches user role
+    const isAdmin = token.startsWith('admin-token-');
+    if ((isAdmin && user.role !== 'admin') || (!isAdmin && user.role !== 'student')) {
+      return res.status(403).json({ error: 'Invalid token for user role' });
+    }
+
+    // Add user to request object
+    (req as any).user = user;
+    next();
+  } catch (error) {
+    console.error('Authentication error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize MongoDB connection
@@ -123,16 +169,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/student/courses', async (req, res) => {
     try {
       const courses = await mongoStorage.listCourses({ visibility: 'public' });
+      const classes = await mongoStorage.listClasses({ visibility: 'public' });
+      const tests = await mongoStorage.listTests({ visibility: 'public' });
+      const assignments = await mongoStorage.listAssignments({ visibility: 'public' });
 
-      // Add progress information for each course
-      const coursesWithProgress = courses.map(course => ({
-        ...course,
-        progress: Math.floor(Math.random() * 100),
-        instructor: {
-          name: 'John Instructor',
-          initials: 'JI'
-        }
-      }));
+      const coursesWithProgress = courses.map(course => {
+        // Get all items for this course
+        const courseClasses = classes.filter(c => c.courseId === course._id);
+        const courseTests = tests.filter(t => t.courseId === course._id);
+        const courseAssignments = assignments.filter(a => a.courseId === course._id);
+        
+        const totalItems = courseClasses.length + courseTests.length + courseAssignments.length;
+        const completedItems = 0; // This will be updated when we implement progress tracking
+        
+        return {
+          ...course,
+          progress: totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0,
+          instructor: {
+            name: course.instructor?.name || 'Unknown Instructor',
+            initials: course.instructor?.initials || 'UI'
+          }
+        };
+      });
 
       res.json(coursesWithProgress);
     } catch (error) {
@@ -244,60 +302,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/student/profile', async (req, res) => {
+  app.get('/api/student/profile', authenticateUser, async (req, res) => {
     try {
-      // Get the student user
-      const student = await mongoStorage.getUserByEmail('student@codegym.com');
+      const user = (req as any).user;
 
-      if (!student) {
-        return res.status(404).json({ error: 'Student not found' });
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
       }
 
       // Don't send the password
-      const { password, ...studentData } = student;
+      const { password, ...userData } = user;
 
-      res.json(studentData);
+      res.json(userData);
     } catch (error) {
       console.error('Error fetching student profile:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
 
-  app.patch('/api/student/profile', async (req, res) => {
+  app.patch('/api/student/profile', authenticateUser, async (req, res) => {
     try {
       const { name, email } = req.body;
-      const student = await mongoStorage.getUserByEmail('student@codegym.com');
+      const user = (req as any).user;
 
-      if (!student) {
-        return res.status(404).json({ error: 'Student not found' });
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
       }
 
-      const updatedStudent = await mongoStorage.updateUser(student._id, { name, email });
-      const { password, ...studentData } = updatedStudent;
+      const updatedUser = await mongoStorage.updateUser(user._id, { name, email });
+      if (!updatedUser) {
+        return res.status(404).json({ error: 'Failed to update user' });
+      }
 
-      res.json(studentData);
+      const { password, ...userData } = updatedUser;
+      res.json(userData);
     } catch (error) {
       console.error('Error updating student profile:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
 
-  app.patch('/api/student/profile/password', async (req, res) => {
+  app.patch('/api/student/profile/password', authenticateUser, async (req, res) => {
     try {
       const { currentPassword, newPassword } = req.body;
-      const student = await mongoStorage.getUserByEmail('student@codegym.com');
+      const user = (req as any).user;
 
-      if (!student) {
-        return res.status(404).json({ error: 'Student not found' });
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
       }
 
-      const isValidPassword = await bcrypt.compare(currentPassword, student.password);
+      const isValidPassword = await bcrypt.compare(currentPassword, user.password);
       if (!isValidPassword) {
         return res.status(401).json({ error: 'Current password is incorrect' });
       }
 
       const hashedPassword = await bcrypt.hash(newPassword, 10);
-      await mongoStorage.updateUser(student._id, { password: hashedPassword });
+      await mongoStorage.updateUser(user._id, { password: hashedPassword });
 
       res.json({ message: 'Password updated successfully' });
     } catch (error) {
@@ -306,60 +366,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/profile', async (req, res) => {
+  app.get('/api/admin/profile', authenticateUser, async (req, res) => {
     try {
-      // Get the admin user
-      const admin = await mongoStorage.getUserByEmail('admin@codegym.com');
+      const user = (req as any).user;
 
-      if (!admin) {
-        return res.status(404).json({ error: 'Admin not found' });
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
       }
 
       // Don't send the password
-      const { password, ...adminData } = admin;
+      const { password, ...userData } = user;
 
-      res.json(adminData);
+      res.json(userData);
     } catch (error) {
       console.error('Error fetching admin profile:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
 
-  app.patch('/api/admin/profile', async (req, res) => {
+  app.patch('/api/admin/profile', authenticateUser, async (req, res) => {
     try {
       const { name, email } = req.body;
-      const admin = await mongoStorage.getUserByEmail('admin@codegym.com');
+      const user = (req as any).user;
 
-      if (!admin) {
-        return res.status(404).json({ error: 'Admin not found' });
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
       }
 
-      const updatedAdmin = await mongoStorage.updateUser(admin._id, { name, email });
-      const { password, ...adminData } = updatedAdmin;
+      const updatedUser = await mongoStorage.updateUser(user._id, { name, email });
+      if (!updatedUser) {
+        return res.status(404).json({ error: 'Failed to update user' });
+      }
 
-      res.json(adminData);
+      const { password, ...userData } = updatedUser;
+      res.json(userData);
     } catch (error) {
       console.error('Error updating admin profile:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
 
-  app.patch('/api/admin/profile/password', async (req, res) => {
+  app.patch('/api/admin/profile/password', authenticateUser, async (req, res) => {
     try {
       const { currentPassword, newPassword } = req.body;
-      const admin = await mongoStorage.getUserByEmail('admin@codegym.com');
+      const user = (req as any).user;
 
-      if (!admin) {
-        return res.status(404).json({ error: 'Admin not found' });
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
       }
 
-      const isValidPassword = await bcrypt.compare(currentPassword, admin.password);
+      const isValidPassword = await bcrypt.compare(currentPassword, user.password);
       if (!isValidPassword) {
         return res.status(401).json({ error: 'Current password is incorrect' });
       }
 
       const hashedPassword = await bcrypt.hash(newPassword, 10);
-      await mongoStorage.updateUser(admin._id, { password: hashedPassword });
+      await mongoStorage.updateUser(user._id, { password: hashedPassword });
 
       res.json({ message: 'Password updated successfully' });
     } catch (error) {
@@ -844,20 +906,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/student/assignments', async (req, res) => {
+  app.get('/api/student/assignments', authenticateUser, async (req, res) => {
     try {
       const courseId = req.query.courseId as string | undefined;
+      const user = (req as any).user;
+
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
       const assignments = await mongoStorage.listAssignments({ 
         visibility: 'public',
         courseId
       });
 
-      // Add status information
-      const assignmentsWithStatus = assignments.map(assignment => ({
-        ...assignment,
-        status: Math.random() > 0.5 ? 'completed' : Math.random() > 0.5 ? 'in-progress' : 'pending',
-        dueDate: new Date(Date.now() + Math.floor(Math.random() * 10 + 1) * 24 * 60 * 60 * 1000)
-      }));
+      // Fetch student's assignment results
+      const results = await mongoStorage.listResults({ 
+        studentId: user._id,
+        assignmentId: { $exists: true }
+      });
+
+      // Merge assignments with results to determine status
+      const assignmentsWithStatus = assignments.map(assignment => {
+        const result = results.find(r => r.assignmentId === assignment._id);
+        const dueDate = assignment.dueDate ? new Date(assignment.dueDate) : undefined;
+        const now = new Date();
+
+        let status: 'pending' | 'in-progress' | 'completed' | 'overdue' = 'pending';
+        if (result) {
+          status = 'completed';
+        } else if (dueDate && dueDate < now) {
+          status = 'overdue';
+        } else if (assignment.status === 'in-progress') {
+          status = 'in-progress';
+        }
+
+        return {
+          ...assignment,
+          status,
+          dueDate
+        };
+      });
 
       res.json(assignmentsWithStatus);
     } catch (error) {
@@ -921,29 +1010,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/student/results', async (req, res) => {
+  app.get('/api/student/results', authenticateUser, async (req, res) => {
     try {
-      const student = await mongoStorage.getUserByEmail('student@codegym.com');
-      if (!student) {
-        return res.status(404).json({ error: 'Student not found' });
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
       }
 
-      const studentId = student._id;
-      const results = await mongoStorage.listResults({ studentId });
+      const results = await mongoStorage.listResults({ 
+        studentId: user._id
+      });
 
-      res.json(results);
+      // If no results found, return empty array instead of 404
+      res.json(results || []);
     } catch (error) {
       console.error('Error fetching student results:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
 
-  app.get('/api/student/tests/:id/results', async (req, res) => {
+  app.get('/api/student/tests/:id/results', authenticateUser, async (req, res) => {
     try {
       const testId = req.params.id;
-      const student = await mongoStorage.getUserByEmail('student@codegym.com');
-      if (!student) {
-        return res.status(404).json({ error: 'Student not found' });
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
       }
 
       const test = await mongoStorage.getTest(testId);
@@ -952,27 +1043,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const result = await mongoStorage.listResults({ 
-        studentId: student._id,
+        studentId: user._id,
         testId 
       }).then(results => results[0]);
 
-      if (!result) {
-        return res.status(404).json({ error: 'Result not found' });
-      }
-
-      res.json({ test, result });
+      // Return test data even if no result exists yet
+      res.json({ 
+        test,
+        result: result || null
+      });
     } catch (error) {
       console.error('Error fetching test results:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
 
-  app.get('/api/student/assignments/:id/results', async (req, res) => {
+  app.get('/api/student/assignments/:id/results', authenticateUser, async (req, res) => {
     try {
       const assignmentId = req.params.id;
-      const student = await mongoStorage.getUserByEmail('student@codegym.com');
-      if (!student) {
-        return res.status(404).json({ error: 'Student not found' });
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
       }
 
       const assignment = await mongoStorage.getAssignment(assignmentId);
@@ -981,7 +1072,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const result = await mongoStorage.listResults({ 
-        studentId: student._id,
+        studentId: user._id,
         assignmentId 
       }).then(results => results[0]);
 
@@ -996,18 +1087,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/student/results', async (req, res) => {
+  app.post('/api/student/results', authenticateUser, async (req, res) => {
     try {
-      // Get the current student ID from auth token (in a real app)
-      // For now, we'll use the demo student ID
-      const student = await mongoStorage.getUserByEmail('student@codegym.com');
-      if (!student) {
-        return res.status(404).json({ error: 'Student not found' });
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
       }
 
+      // Check if a result already exists for this test/assignment
+      const existingResult = await mongoStorage.listResults({
+        studentId: user._id,
+        testId: req.body.testId,
+        assignmentId: req.body.assignmentId
+      }).then(results => results[0]);
+
+      if (existingResult) {
+        // Update existing result
+        const updatedResult = await mongoStorage.updateResult(existingResult._id!, {
+          ...req.body,
+          studentId: user._id,
+          submittedAt: new Date()
+        });
+        return res.json(updatedResult);
+      }
+
+      // Create new result
       const resultData = {
         ...req.body,
-        studentId: student._id,
+        studentId: user._id,
         submittedAt: new Date()
       };
 
@@ -1094,45 +1201,126 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/student/progress', async (req, res) => {
+  app.get('/api/student/progress', authenticateUser, async (req, res) => {
     try {
-      // Get the current student ID from auth token (in a real app)
-      // For now, we'll use the demo student ID
-      const student = await mongoStorage.getUserByEmail('student@codegym.com');
-      if (!student) {
-        return res.status(404).json({ error: 'Student not found' });
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
       }
 
-      // In a real app, calculate this from actual student activity
+      // Get all course progress for the student
+      const courseProgress = await mongoStorage.listCourseProgress({ studentId: user._id });
+      
+      // Get all courses the student is enrolled in
+      const courses = await mongoStorage.listCourses({ 
+        visibility: 'public',
+        createdBy: user._id 
+      });
+      
+      // Calculate overall progress
       const progress = {
-        overall: 65,
+        overall: courseProgress.length > 0 
+          ? Math.round(courseProgress.reduce((acc, cp) => acc + (cp.completedItems.length / cp.totalItems), 0) / courseProgress.length * 100)
+          : 0,
         courses: {
-          completed: 2,
-          inProgress: 3,
-          total: 5
+          completed: courseProgress.filter(cp => cp.completedItems.length === cp.totalItems).length,
+          inProgress: courseProgress.filter(cp => cp.completedItems.length > 0 && cp.completedItems.length < cp.totalItems).length,
+          total: courses.length
         },
         tests: {
-          completed: 12,
-          pending: 5,
-          average: 85
+          completed: courseProgress.reduce((acc, cp) => acc + cp.completedItems.filter((item: any) => item.itemType === 'test').length, 0),
+          pending: courses.reduce((acc, course) => acc + (course.tests?.length || 0), 0) - 
+            courseProgress.reduce((acc, cp) => acc + cp.completedItems.filter((item: any) => item.itemType === 'test').length, 0),
+          average: courseProgress.length > 0
+            ? Math.round(courseProgress.reduce((acc, cp) => {
+                const testScores = cp.completedItems
+                  .filter((item: any) => item.itemType === 'test' && item.score !== undefined)
+                  .map((item: any) => item.score!);
+                return acc + (testScores.reduce((sum: number, score: number) => sum + score, 0) / testScores.length);
+              }, 0) / courseProgress.length)
+            : 0
         },
         assignments: {
-          completed: 8,
-          pending: 4,
-          average: 88
-        },
-        skills: {
-          javascript: 85,
-          react: 70,
-          nodejs: 60,
-          database: 55,
-          problemSolving: 80
+          completed: courseProgress.reduce((acc, cp) => acc + cp.completedItems.filter((item: any) => item.itemType === 'assignment').length, 0),
+          pending: courses.reduce((acc, course) => acc + (course.assignments?.length || 0), 0) - 
+            courseProgress.reduce((acc, cp) => acc + cp.completedItems.filter((item: any) => item.itemType === 'assignment').length, 0),
+          average: courseProgress.length > 0
+            ? Math.round(courseProgress.reduce((acc, cp) => {
+                const assignmentScores = cp.completedItems
+                  .filter((item: any) => item.itemType === 'assignment' && item.score !== undefined)
+                  .map((item: any) => item.score!);
+                return acc + (assignmentScores.reduce((sum: number, score: number) => sum + score, 0) / assignmentScores.length);
+              }, 0) / courseProgress.length)
+            : 0
         }
       };
 
       res.json(progress);
     } catch (error) {
       console.error('Error fetching student progress:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // Update course progress endpoint
+  app.post('/api/student/progress', authenticateUser, async (req, res) => {
+    try {
+      const { courseId, itemId, itemType, score } = req.body;
+      const user = (req as any).user;
+
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Get existing progress or create new
+      let progress = await mongoStorage.getCourseProgressByStudentAndCourse(user._id, courseId);
+      
+      if (!progress) {
+        // Get course to determine total items
+        const course = await mongoStorage.getCourse(courseId);
+        if (!course) {
+          return res.status(404).json({ error: 'Course not found' });
+        }
+
+        // Calculate total items
+        const totalItems = (course.classes?.length || 0) + 
+          (course.tests?.length || 0) + 
+          (course.assignments?.length || 0);
+
+        // Create new progress
+        progress = await mongoStorage.createCourseProgress({
+          studentId: user._id,
+          courseId,
+          completedItems: [],
+          totalItems
+        });
+      }
+
+      // Check if item is already completed
+      const existingItem = progress.completedItems.find((item: any) => item.itemId === itemId);
+      if (existingItem) {
+        // Update existing item
+        existingItem.completedAt = new Date();
+        if (score !== undefined) {
+          existingItem.score = score;
+        }
+      } else {
+        // Add new completed item
+        progress.completedItems.push({
+          itemId,
+          itemType,
+          completedAt: new Date(),
+          score
+        });
+      }
+
+      // Update progress
+      progress.lastActivity = new Date();
+      const updatedProgress = await mongoStorage.updateCourseProgress(progress._id!, progress);
+
+      res.json(updatedProgress);
+    } catch (error) {
+      console.error('Error updating course progress:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
@@ -1227,6 +1415,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Student login error:', error);
       return res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // Student Results Endpoints
+  app.get('/api/student/results/tests', authenticateUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Get all test results for this student
+      const results = await mongoStorage.listResults({ 
+        studentId: user._id,
+        testId: { $exists: true }
+      });
+      res.json(results);
+    } catch (error) {
+      console.error('Error fetching student test results:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.get('/api/student/results/assignments', authenticateUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Get all assignment results for this student
+      const results = await mongoStorage.listResults({ 
+        studentId: user._id,
+        assignmentId: { $exists: true }
+      });
+      res.json(results);
+    } catch (error) {
+      console.error('Error fetching student assignment results:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 

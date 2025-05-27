@@ -1,5 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/providers/AuthProvider';
 import AdminLayout from '@/components/layout/AdminLayout';
 import StatCard from '@/components/dashboard/StatCard';
 import CourseCard from '@/components/dashboard/CourseCard';
@@ -49,6 +50,7 @@ console.log(findMax([-1, -5, -10]));   // Expected: -1
 console.log(findMax([]));              // Expected: null`;
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
   // Fetch dashboard stats
   const { data: stats, isLoading: isLoadingStats } = useQuery<DashboardStats>({
     queryKey: ['/api/admin/dashboard/stats'],
@@ -75,7 +77,7 @@ export default function AdminDashboard() {
         {/* Welcome Section */}
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Welcome back, John!</h2>
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Welcome back, {user?.name}!</h2>
             <p className="text-gray-600 dark:text-gray-400">Here's what's happening with your courses today.</p>
           </div>
           <div className="mt-4 md:mt-0 flex space-x-3">

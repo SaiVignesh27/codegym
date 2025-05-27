@@ -145,6 +145,23 @@ export const resultSchema = z.object({
   timeSpent: z.number().optional(), // in minutes
 });
 
+// Course Progress schema
+export const courseProgressSchema = z.object({
+  _id: z.string().optional(),
+  studentId: z.string(),
+  courseId: z.string(),
+  completedItems: z.array(z.object({
+    itemId: z.string(),
+    itemType: z.enum(['class', 'test', 'assignment']),
+    completedAt: z.date(),
+    score: z.number().optional(),
+  })),
+  totalItems: z.number(),
+  lastActivity: z.date().optional(),
+  createdAt: z.date().optional(),
+  updatedAt: z.date().optional(),
+});
+
 // Insert schemas (for creating new records)
 export const insertUserSchema = userSchema.omit({ _id: true });
 export const insertCourseSchema = courseSchema.omit({ _id: true });
@@ -152,6 +169,7 @@ export const insertClassSchema = classSchema.omit({ _id: true });
 export const insertTestSchema = testSchema.omit({ _id: true });
 export const insertAssignmentSchema = assignmentSchema.omit({ _id: true });
 export const insertResultSchema = resultSchema.omit({ _id: true });
+export const insertCourseProgressSchema = courseProgressSchema.omit({ _id: true });
 
 // Types
 export type User = z.infer<typeof userSchema>;
@@ -173,3 +191,6 @@ export type InsertAssignment = z.infer<typeof insertAssignmentSchema>;
 
 export type Result = z.infer<typeof resultSchema>;
 export type InsertResult = z.infer<typeof insertResultSchema>;
+
+export type CourseProgress = z.infer<typeof courseProgressSchema>;
+export type InsertCourseProgress = z.infer<typeof insertCourseProgressSchema>;

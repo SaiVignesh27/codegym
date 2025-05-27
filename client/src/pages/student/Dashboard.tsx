@@ -6,15 +6,36 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/providers/AuthProvider';
 import { TestStatus, AssignmentStatus } from '@shared/types';
-import { Calendar, Clock, Star, BookOpen, CheckCircle, FileQuestion, ClipboardList } from 'lucide-react';
+import { Calendar, Clock, Star, BookOpen, CheckCircle, FileQuestion, ClipboardList, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { Course } from '@shared/schema';
+import { Link } from 'wouter';
+
+interface CourseProgress {
+  courseId: string;
+  completed: number;
+  total: number;
+  lastActivity?: Date;
+}
+
+interface CourseWithProgress extends Course {
+  progress: number;
+  completedItems: number;
+  totalItems: number;
+  lastActivity?: Date;
+}
 
 export default function StudentDashboard() {
   const { user } = useAuth();
   
   // Fetch enrolled courses
-  const { data: courses, isLoading: isLoadingCourses } = useQuery({
+  const { data: courses, isLoading: isLoadingCourses } = useQuery<Course[]>({
     queryKey: ['/api/student/courses'],
+  });
+  
+  // Fetch course progress
+  const { data: progressData, isLoading: isLoadingProgress } = useQuery<Record<string, CourseProgress>>({
+    queryKey: ['/api/student/progress'],
   });
   
   // Fetch upcoming tests
@@ -27,11 +48,24 @@ export default function StudentDashboard() {
     queryKey: ['/api/student/assignments/pending'],
   });
   
-  // Fetch recent achievements
-  const { data: achievements, isLoading: isLoadingAchievements } = useQuery({
-    queryKey: ['/api/student/achievements'],
-  });
-  
+  // Process courses with progress data
+  const coursesWithProgress: CourseWithProgress[] = React.useMemo(() => {
+    if (!courses || !progressData) return [];
+    
+    return courses.map(course => {
+      const courseProgress = progressData[course._id as string] || { completed: 0, total: 0 };
+      return {
+        ...course,
+        progress: courseProgress.total > 0 ? Math.round((courseProgress.completed / courseProgress.total) * 100) : 0,
+        completedItems: courseProgress.completed || 0,
+        totalItems: courseProgress.total || 0,
+        lastActivity: courseProgress.lastActivity
+      };
+    });
+  }, [courses, progressData]);
+
+  const isLoading = isLoadingCourses || isLoadingProgress || isLoadingTests || isLoadingAssignments;
+
   return (
     <StudentLayout>
       <div className="space-y-6">
@@ -45,7 +79,9 @@ export default function StudentDashboard() {
               </p>
             </div>
             <div className="mt-4 md:mt-0">
-              <Button>Continue Learning</Button>
+              <Button asChild>
+                <Link href="/student/courses">Continue Learning</Link>
+              </Button>
             </div>
           </div>
         </div>
@@ -69,13 +105,13 @@ export default function StudentDashboard() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Completed Tests
+                Upcoming Tests
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center">
                 <FileQuestion className="h-5 w-5 text-green-500 mr-2" />
-                <span className="text-2xl font-bold">12</span>
+                <span className="text-2xl font-bold">{tests?.length || 0}</span>
               </div>
             </CardContent>
           </Card>
@@ -103,7 +139,11 @@ export default function StudentDashboard() {
             <CardContent>
               <div className="flex items-center">
                 <Star className="h-5 w-5 text-yellow-500 mr-2" fill="currentColor" />
-                <span className="text-2xl font-bold">87%</span>
+                <span className="text-2xl font-bold">
+                  {coursesWithProgress.length > 0 
+                    ? Math.round(coursesWithProgress.reduce((acc, course) => acc + course.progress, 0) / coursesWithProgress.length)
+                    : 0}%
+                </span>
               </div>
             </CardContent>
           </Card>
@@ -119,7 +159,7 @@ export default function StudentDashboard() {
                 <CardDescription>Your most recent course activities</CardDescription>
               </CardHeader>
               <CardContent>
-                {isLoadingCourses ? (
+                {isLoading ? (
                   <div className="space-y-4">
                     {Array(3).fill(0).map((_, i) => (
                       <div key={i} className="animate-pulse">
@@ -129,43 +169,31 @@ export default function StudentDashboard() {
                       </div>
                     ))}
                   </div>
-                ) : (
+                ) : coursesWithProgress.length > 0 ? (
                   <div className="space-y-6">
-                    <div>
-                      <div className="flex justify-between mb-2">
-                        <h4 className="font-medium text-gray-800 dark:text-white">JavaScript Fundamentals</h4>
-                        <span className="text-sm text-gray-500 dark:text-gray-400">65% Complete</span>
+                    {coursesWithProgress.map((course) => (
+                      <div key={course._id}>
+                        <div className="flex justify-between mb-2">
+                          <h4 className="font-medium text-gray-800 dark:text-white">{course.title}</h4>
+                          <span className="text-sm text-gray-500 dark:text-gray-400">{course.progress}% Complete</span>
+                        </div>
+                        <Progress value={course.progress} className="h-2" />
+                        <div className="mt-2 flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                          <span>
+                            Last activity: {course.lastActivity 
+                              ? formatDistanceToNow(new Date(course.lastActivity), { addSuffix: true })
+                              : 'No activity yet'}
+                          </span>
+                          <span>{course.completedItems}/{course.totalItems} items completed</span>
+                        </div>
                       </div>
-                      <Progress value={65} className="h-2" />
-                      <div className="mt-2 flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                        <span>Last activity: 2 hours ago</span>
-                        <span>8/12 lessons completed</span>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <div className="flex justify-between mb-2">
-                        <h4 className="font-medium text-gray-800 dark:text-white">React.js Development</h4>
-                        <span className="text-sm text-gray-500 dark:text-gray-400">40% Complete</span>
-                      </div>
-                      <Progress value={40} className="h-2" />
-                      <div className="mt-2 flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                        <span>Last activity: Yesterday</span>
-                        <span>4/10 lessons completed</span>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <div className="flex justify-between mb-2">
-                        <h4 className="font-medium text-gray-800 dark:text-white">Node.js Backend Development</h4>
-                        <span className="text-sm text-gray-500 dark:text-gray-400">20% Complete</span>
-                      </div>
-                      <Progress value={20} className="h-2" />
-                      <div className="mt-2 flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                        <span>Last activity: 3 days ago</span>
-                        <span>2/10 lessons completed</span>
-                      </div>
-                    </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                    <h3 className="text-lg font-medium">No courses enrolled</h3>
+                    <p className="text-sm">Enroll in courses to start learning</p>
                   </div>
                 )}
               </CardContent>
@@ -180,7 +208,7 @@ export default function StudentDashboard() {
                 <CardDescription>Tests and assignment deadlines</CardDescription>
               </CardHeader>
               <CardContent>
-                {isLoadingTests || isLoadingAssignments ? (
+                {isLoading ? (
                   <div className="space-y-4">
                     {Array(4).fill(0).map((_, i) => (
                       <div key={i} className="animate-pulse">
@@ -189,112 +217,47 @@ export default function StudentDashboard() {
                       </div>
                     ))}
                   </div>
-                ) : (
+                ) : (tests?.length || 0) + (assignments?.length || 0) > 0 ? (
                   <div className="space-y-4">
-                    <div className="flex items-start">
-                      <div className="p-2 rounded-md bg-primary-light bg-opacity-10 mt-0.5">
-                        <FileQuestion className="h-4 w-4 text-primary" />
+                    {tests?.map((test) => (
+                      <div key={test._id} className="flex items-start">
+                        <div className="p-2 rounded-md bg-primary-light bg-opacity-10 mt-0.5">
+                          <FileQuestion className="h-4 w-4 text-primary" />
+                        </div>
+                        <div className="ml-3">
+                          <h4 className="text-sm font-medium text-gray-800 dark:text-white">{test.title}</h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center mt-1">
+                            <Clock className="h-3 w-3 mr-1" /> {test.status === 'completed' ? 'Completed' : 'Pending'}
+                          </p>
+                        </div>
                       </div>
-                      <div className="ml-3">
-                        <h4 className="text-sm font-medium text-gray-800 dark:text-white">JavaScript Arrays & Objects</h4>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center mt-1">
-                          <Clock className="h-3 w-3 mr-1" /> Due tomorrow
-                        </p>
-                      </div>
-                    </div>
+                    ))}
                     
-                    <div className="flex items-start">
-                      <div className="p-2 rounded-md bg-warning bg-opacity-10 mt-0.5">
-                        <ClipboardList className="h-4 w-4 text-warning" />
+                    {assignments?.map((assignment) => (
+                      <div key={assignment._id} className="flex items-start">
+                        <div className="p-2 rounded-md bg-warning bg-opacity-10 mt-0.5">
+                          <ClipboardList className="h-4 w-4 text-warning" />
+                        </div>
+                        <div className="ml-3">
+                          <h4 className="text-sm font-medium text-gray-800 dark:text-white">{assignment.title}</h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center mt-1">
+                            <Calendar className="h-3 w-3 mr-1" /> Due {formatDistanceToNow(new Date(assignment.dueDate), { addSuffix: true })}
+                          </p>
+                        </div>
                       </div>
-                      <div className="ml-3">
-                        <h4 className="text-sm font-medium text-gray-800 dark:text-white">React Hooks Assignment</h4>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center mt-1">
-                          <Calendar className="h-3 w-3 mr-1" /> Due in 3 days
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-start">
-                      <div className="p-2 rounded-md bg-secondary bg-opacity-10 mt-0.5">
-                        <FileQuestion className="h-4 w-4 text-secondary" />
-                      </div>
-                      <div className="ml-3">
-                        <h4 className="text-sm font-medium text-gray-800 dark:text-white">React Component Lifecycle</h4>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center mt-1">
-                          <Clock className="h-3 w-3 mr-1" /> Due in 5 days
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-start">
-                      <div className="p-2 rounded-md bg-green-500 bg-opacity-10 mt-0.5">
-                        <ClipboardList className="h-4 w-4 text-green-500" />
-                      </div>
-                      <div className="ml-3">
-                        <h4 className="text-sm font-medium text-gray-800 dark:text-white">Final Project Submission</h4>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center mt-1">
-                          <Calendar className="h-3 w-3 mr-1" /> Due in 2 weeks
-                        </p>
-                      </div>
-                    </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    <FileQuestion className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                    <h3 className="text-lg font-medium">No upcoming tasks</h3>
+                    <p className="text-sm">You're all caught up!</p>
                   </div>
                 )}
               </CardContent>
             </Card>
           </div>
         </div>
-        
-        {/* Recent Achievements */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Achievements</CardTitle>
-            <CardDescription>Your latest learning milestones</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoadingAchievements ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {Array(3).fill(0).map((_, i) => (
-                  <div key={i} className="animate-pulse">
-                    <div className="h-20 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="bg-gray-50 dark:bg-dark-border rounded-lg p-4 flex items-center">
-                  <div className="p-3 rounded-full bg-green-100 dark:bg-green-900">
-                    <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
-                  </div>
-                  <div className="ml-4">
-                    <h4 className="font-medium text-gray-800 dark:text-white">JavaScript Mastery</h4>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Completed all JavaScript tests with 90%+ score</p>
-                  </div>
-                </div>
-                
-                <div className="bg-gray-50 dark:bg-dark-border rounded-lg p-4 flex items-center">
-                  <div className="p-3 rounded-full bg-primary-light bg-opacity-20">
-                    <Star className="h-6 w-6 text-primary" fill="currentColor" />
-                  </div>
-                  <div className="ml-4">
-                    <h4 className="font-medium text-gray-800 dark:text-white">Top Performer</h4>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Ranked in the top 5% of React.js course</p>
-                  </div>
-                </div>
-                
-                <div className="bg-gray-50 dark:bg-dark-border rounded-lg p-4 flex items-center">
-                  <div className="p-3 rounded-full bg-purple-100 dark:bg-purple-900">
-                    <BookOpen className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <div className="ml-4">
-                    <h4 className="font-medium text-gray-800 dark:text-white">Learning Streak</h4>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Completed lessons for 7 consecutive days</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
     </StudentLayout>
   );

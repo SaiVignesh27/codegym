@@ -1,12 +1,14 @@
-
 import React, { useState } from 'react';
 import { useParams, Link, useLocation } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import StudentLayout from '@/components/layout/StudentLayout';
-import { Assignment } from '@shared/schema';
+import { Assignment, Result } from '@shared/schema';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, ArrowLeft } from 'lucide-react';
+import { apiRequest } from '@/lib/queryClient';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 
 export default function AssignmentView() {
   const { id } = useParams();
@@ -40,27 +42,25 @@ export default function AssignmentView() {
       const maxPoints = assignment.questions.reduce((sum, q) => sum + (q.points || 1), 0);
       const scorePercentage = (totalPoints / maxPoints) * 100;
 
-      const response = await fetch(`/api/student/results`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          assignmentId: id,
-          courseId: assignment.courseId,
-          type: 'assignment',
-          answers: questionResults,
-          score: scorePercentage,
-          maxScore: maxPoints,
-          submittedAt: new Date(),
-          title: assignment.title
-        }),
-      });
-      
-      if (!response.ok) throw new Error('Failed to submit assignment');
-      return response.json();
+      const result = { 
+        assignmentId: id,
+        courseId: assignment.courseId,
+        type: 'assignment',
+        answers: questionResults,
+        score: scorePercentage,
+        maxScore: maxPoints,
+        submittedAt: new Date(),
+        title: assignment.title
+      };
+
+      return apiRequest('POST', '/api/student/results', result);
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/student/assignments/${id}`] });
-      queryClient.setQueryData([`/api/student/assignments/${id}/results`], data);
+      queryClient.setQueryData([`/api/student/assignments/${id}/results`], {
+        assignment,
+        result: data
+      });
       setLocation(`/student/assignments/${id}/results`);
     },
   });
@@ -73,6 +73,76 @@ export default function AssignmentView() {
       console.error('Failed to submit assignment:', error);
     }
     setIsSubmitting(false);
+  };
+
+  // Render question based on type
+  const renderQuestion = (question: any, index: number) => {
+    switch (question.type) {
+      case 'mcq':
+        return (
+          <RadioGroup
+            value={answers[question._id || index.toString()]}
+            onValueChange={(value) =>
+              setAnswers(prev => ({
+                ...prev,
+                [question._id || index.toString()]: value
+              }))
+            }
+          >
+            {question.options?.map((option: string, optIndex: number) => (
+              <div key={optIndex} className="flex items-center space-x-2">
+                <RadioGroupItem
+                  value={option}
+                  id={`q${index}-opt${optIndex}`}
+                />
+                <Label htmlFor={`q${index}-opt${optIndex}`}>{option}</Label>
+              </div>
+            ))}
+          </RadioGroup>
+        );
+      
+      case 'fill':
+        return (
+          <textarea
+            className="w-full p-2 border rounded-md dark:bg-gray-800"
+            rows={4}
+            placeholder="Enter your answer here..."
+            value={answers[question._id || index.toString()] || ''}
+            onChange={(e) => setAnswers(prev => ({
+              ...prev,
+              [question._id || index.toString()]: e.target.value
+            }))}
+          />
+        );
+
+      case 'code':
+        return (
+          <textarea
+            className="w-full p-2 border rounded-md font-mono dark:bg-gray-800"
+            rows={8}
+            placeholder="Write your code here..."
+            value={answers[question._id || index.toString()] || ''}
+            onChange={(e) => setAnswers(prev => ({
+              ...prev,
+              [question._id || index.toString()]: e.target.value
+            }))}
+          />
+        );
+
+      default:
+        return (
+          <textarea
+            className="w-full p-2 border rounded-md dark:bg-gray-800"
+            rows={4}
+            placeholder="Enter your answer here..."
+            value={answers[question._id || index.toString()] || ''}
+            onChange={(e) => setAnswers(prev => ({
+              ...prev,
+              [question._id || index.toString()]: e.target.value
+            }))}
+          />
+        );
+    }
   };
 
   if (isLoading) {
@@ -123,16 +193,7 @@ export default function AssignmentView() {
               <div key={index} className="mb-6">
                 <h3 className="font-medium mb-2">Question {index + 1}</h3>
                 <p className="mb-4">{question.text}</p>
-                <textarea
-                  className="w-full p-2 border rounded-md dark:bg-gray-800"
-                  rows={4}
-                  placeholder="Enter your answer here..."
-                  value={answers[question._id || index.toString()] || ''}
-                  onChange={(e) => setAnswers(prev => ({
-                    ...prev,
-                    [question._id || index.toString()]: e.target.value
-                  }))}
-                />
+                {renderQuestion(question, index)}
               </div>
             ))}
             <div className="flex justify-end mt-6">

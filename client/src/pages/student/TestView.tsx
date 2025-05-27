@@ -1,26 +1,42 @@
-
-import React, { useState } from 'react';
-import { useParams, Link } from 'wouter';
+import React, { useState, useEffect } from 'react';
+import { useParams, useLocation, Link } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import StudentLayout from '@/components/layout/StudentLayout';
-import { Test } from '@shared/schema';
+import { Test, Result } from '@shared/schema';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Loader2, ArrowLeft, Timer, AlertTriangle } from 'lucide-react';
+import { useAuth } from '@/providers/AuthProvider';
+import { apiRequest } from '@/lib/queryClient';
 
 export default function TestView() {
   const { id } = useParams();
+  const [, setLocation] = useLocation();
+  const { user } = useAuth();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const queryClient = useQueryClient();
-
+  const [isTestSubmitted, setIsTestSubmitted] = useState(false);
   const { data: test, isLoading } = useQuery<Test>({
     queryKey: [`/api/student/tests/${id}`],
   });
+
+  // Fetch the student's result for this test
+  const { data: resultData, isLoading: isResultLoading } = useQuery({
+    queryKey: [`/api/student/tests/${id}/results`],
+    retry: false,
+  });
+
+  // If result exists, redirect to results page
+  React.useEffect(() => {
+    if (resultData && resultData.result) {
+      setLocation(`/student/tests/${id}/results`);
+    }
+  }, [resultData, id, setLocation]);
 
   // Start timer when test loads
   React.useEffect(() => {
@@ -38,7 +54,7 @@ export default function TestView() {
     }
 
     const timer = setInterval(() => {
-      setTimeLeft(prev => prev !== null ? prev - 1 : null);
+      setTimeLeft((prev) => (prev !== null ? prev - 1 : null));
     }, 1000);
 
     return () => clearInterval(timer);
@@ -52,49 +68,66 @@ export default function TestView() {
 
   const submitTest = useMutation({
     mutationFn: async () => {
-      if (!test) throw new Error('Test not found');
-      
-      // Calculate score
+      if (!test || !user) throw new Error('Test or user not found');
+
+      // Calculate score with improved answer checking
       const questionResults = test.questions.map((question, index) => {
-        const answer = answers[question._id || index.toString()];
-        const isCorrect = answer === question.correctAnswer;
+        const studentAnswer = answers[question._id || index.toString()];
+        const correctAnswer = question.correctAnswer;
+        
+        // Get the index of the selected option
+        const selectedOptionIndex = question.options?.findIndex(opt => opt === studentAnswer) ?? -1;
+        const correctAnswerIndex = parseInt(correctAnswer.toString());
+        
+        // Check if the answer is correct
+        const isCorrect = selectedOptionIndex === correctAnswerIndex;
+        const feedback = isCorrect 
+          ? 'Correct answer' 
+          : `Incorrect. Correct answer: ${question.options?.[correctAnswerIndex] || correctAnswer}`;
+
         const points = isCorrect ? (question.points || 1) : 0;
+        
         return {
           questionId: question._id || index.toString(),
-          answer,
+          answer: studentAnswer,
           isCorrect,
           points,
+          feedback,
+          correctAnswer: question.options?.[correctAnswerIndex] || correctAnswer
         };
       });
 
       const totalPoints = questionResults.reduce((sum, q) => sum + q.points, 0);
       const maxPoints = test.questions.reduce((sum, q) => sum + (q.points || 1), 0);
-      const scorePercentage = (totalPoints / maxPoints) * 100;
+      const scorePercentage = Math.round((totalPoints / maxPoints) * 100);
 
-      const response = await fetch(`/api/student/results`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          testId: id,
-          courseId: test.courseId,
-          type: 'test',
-          answers: questionResults,
-          score: scorePercentage,
-          maxScore: maxPoints,
-          submittedAt: new Date(),
-          title: test.title,
-          timeSpent: test.timeLimit ? (test.timeLimit * 60 - timeLeft!) : undefined
-        }),
-      });
+      // Create result object
+      const result: Partial<Result> = {
+        studentId: user._id,
+        courseId: test.courseId,
+        testId: id,
+        type: 'test',
+        answers: questionResults,
+        status: 'completed',
+        score: scorePercentage,
+        maxScore: maxPoints,
+        submittedAt: new Date(),
+        studentName: user.name,
+        title: test.title,
+        timeSpent: test.timeLimit ? (test.timeLimit * 60 - timeLeft!) : undefined
+      };
 
-      if (!response.ok) throw new Error('Failed to submit test');
-      const result = await response.json();
-      return result;
+      return apiRequest('POST', '/api/student/results', result);
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
+      setIsTestSubmitted(true);
       queryClient.invalidateQueries({ queryKey: [`/api/student/tests/${id}`] });
       queryClient.invalidateQueries({ queryKey: [`/api/student/tests/${id}/results`] });
-      setLocation(`/student/daily-tests/${id}/results`);
+      queryClient.invalidateQueries({ queryKey: ['/api/student/course-progress'] });
+      queryClient.invalidateQueries({ queryKey: [`/api/student/tests`] });
+      if (test?.courseId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/student/tests?courseId=${test.courseId}`] });
+      }
     },
   });
 
@@ -107,6 +140,12 @@ export default function TestView() {
     }
     setIsSubmitting(false);
   };
+
+  React.useEffect(() => {
+    if (isTestSubmitted) {
+      setLocation(`/student/tests/${id}/results`);
+    }
+  }, [isTestSubmitted, id, setLocation]);
 
   if (isLoading) {
     return (
@@ -156,7 +195,7 @@ export default function TestView() {
         </div>
 
         {timeLeft !== null && timeLeft < 300 && (
-          <Alert variant="warning">
+          <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Time is running out!</AlertTitle>
             <AlertDescription>

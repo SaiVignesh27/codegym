@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import StudentLayout from "@/components/layout/StudentLayout";
 import { Course, Class, Test, Assignment } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/providers/AuthProvider";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -36,12 +37,34 @@ import {
 
 export default function CourseDetail() {
   const { id } = useParams();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
 
   // Fetch course details
   const { data: course, isLoading: isLoadingCourse } = useQuery<Course>({
     queryKey: [`/api/student/courses/${id}`],
   });
+
+  // Add mutation for course assignment
+  const { mutate: assignCourse, isError: assignmentError } = useMutation({
+    mutationFn: async () => {
+      if (!user?._id) throw new Error('User not authenticated');
+      const response = await apiRequest(`/api/student/courses/${id}/assign`, 'POST', {
+        studentId: user._id
+      });
+      return response;
+    },
+    onError: (error) => {
+      console.error('Failed to assign course:', error);
+    }
+  });
+
+  // Automatically assign course when component mounts
+  useEffect(() => {
+    if (id && user?._id && course && !course.assignedTo?.includes(user._id)) {
+      assignCourse();
+    }
+  }, [id, user, course]);
 
   // Fetch course classes
   const { data: classes, isLoading: isLoadingClasses } = useQuery<Class[]>({
@@ -60,11 +83,31 @@ export default function CourseDetail() {
     queryKey: [`/api/student/assignments?courseId=${id}`],
   });
 
+  // Fetch test results for this course
+  const { data: testResults, isLoading: isLoadingTestResults } = useQuery<any[]>({
+    queryKey: [`/api/student/results/tests`],
+  });
+
+  // Merge tests with results
+  const testsWithResults = React.useMemo(() => {
+    if (!tests || !testResults) return [];
+    return tests.map((test) => {
+      const result = testResults.find((r) => r.testId === test._id);
+      return {
+        ...test,
+        result,
+        isCompleted: !!result,
+        score: result?.score ?? 0,
+      };
+    });
+  }, [tests, testResults]);
+
   const isLoading =
     isLoadingCourse ||
     isLoadingClasses ||
     isLoadingTests ||
-    isLoadingAssignments;
+    isLoadingAssignments ||
+    isLoadingTestResults;
 
   // Get status badge color
   const getStatusColor = (status: string) => {
@@ -411,7 +454,7 @@ export default function CourseDetail() {
               </div>
             ) : tests && tests.length > 0 ? (
               <div className="space-y-4">
-                {tests.map((test) => (
+                {testsWithResults.map((test) => (
                   <Card key={test._id} className="overflow-hidden">
                     <div className="p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                       <div className="flex items-start md:items-center gap-4">
@@ -444,16 +487,16 @@ export default function CourseDetail() {
                         <Badge className={getStatusColor(test.status)}>
                           {getStatusIcon(test.status)}
                           <span className="ml-1">
-                            {test.status === "completed"
-                              ? "Completed"
-                              : "Take Test"}
+                            {test.isCompleted ? "Completed" : "Take Test"}
                           </span>
                         </Badge>
                         <Button asChild size="sm">
-                          <a href={`/student/tests/${test._id}`}>
-                            {test.status === "completed"
-                              ? "View Results"
-                              : "Start Test"}
+                          <a href={
+                            test.isCompleted
+                              ? `/student/tests/${test._id}/results`
+                              : `/student/tests/${test._id}`
+                          }>
+                            {test.isCompleted ? "View Results" : "Start Test"}
                           </a>
                         </Button>
                       </div>

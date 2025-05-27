@@ -1,4 +1,4 @@
-import { User, Course, Class, Test, Assignment, Result, InsertUser, InsertCourse, InsertClass, InsertTest, InsertAssignment, InsertResult } from '@shared/schema';
+import { User, Course, Class, Test, Assignment, Result, InsertUser, InsertCourse, InsertClass, InsertTest, InsertAssignment, InsertResult, CourseProgress } from '@shared/schema';
 import { ObjectId } from 'mongodb';
 import * as bcrypt from 'bcrypt';
 
@@ -46,6 +46,14 @@ export interface IStorage {
   updateResult(id: string, result: Partial<Result>): Promise<Result | null>;
   deleteResult(id: string): Promise<boolean>;
   listResults(options?: { studentId?: string, courseId?: string, testId?: string, assignmentId?: string }): Promise<Result[]>;
+
+  // Course Progress methods
+  getCourseProgress(id: string): Promise<CourseProgress | null>;
+  getCourseProgressByStudentAndCourse(studentId: string, courseId: string): Promise<CourseProgress | null>;
+  createCourseProgress(progress: InsertCourseProgress): Promise<CourseProgress>;
+  updateCourseProgress(id: string, progress: Partial<CourseProgress>): Promise<CourseProgress | null>;
+  deleteCourseProgress(id: string): Promise<boolean>;
+  listCourseProgress(options?: { studentId?: string, courseId?: string }): Promise<CourseProgress[]>;
 }
 
 // Mock in-memory implementation for development
@@ -56,6 +64,7 @@ export class MemStorage implements IStorage {
   private tests: Map<string, Test>;
   private assignments: Map<string, Assignment>;
   private results: Map<string, Result>;
+  private courseProgress: Map<string, CourseProgress>;
 
   constructor() {
     this.users = new Map();
@@ -64,6 +73,7 @@ export class MemStorage implements IStorage {
     this.tests = new Map();
     this.assignments = new Map();
     this.results = new Map();
+    this.courseProgress = new Map();
     
     // Seed an initial admin user
     this.seedAdminUser();
@@ -426,6 +436,65 @@ export class MemStorage implements IStorage {
     }
     
     return results;
+  }
+
+  // Course Progress methods
+  async getCourseProgress(id: string): Promise<CourseProgress | null> {
+    return this.courseProgress.get(id) || null;
+  }
+
+  async getCourseProgressByStudentAndCourse(studentId: string, courseId: string): Promise<CourseProgress | null> {
+    const progress = Array.from(this.courseProgress.values()).find(
+      p => p.studentId === studentId && p.courseId === courseId
+    );
+    return progress || null;
+  }
+
+  async createCourseProgress(progressData: InsertCourseProgress): Promise<CourseProgress> {
+    const id = new ObjectId().toString();
+    const now = new Date();
+    
+    const progress: CourseProgress = {
+      _id: id,
+      ...progressData,
+      createdAt: now,
+      updatedAt: now
+    };
+    
+    this.courseProgress.set(id, progress);
+    return progress;
+  }
+
+  async updateCourseProgress(id: string, progressData: Partial<CourseProgress>): Promise<CourseProgress | null> {
+    const progress = this.courseProgress.get(id);
+    if (!progress) return null;
+    
+    const updatedProgress = { 
+      ...progress, 
+      ...progressData,
+      updatedAt: new Date()
+    };
+    
+    this.courseProgress.set(id, updatedProgress);
+    return updatedProgress;
+  }
+
+  async deleteCourseProgress(id: string): Promise<boolean> {
+    return this.courseProgress.delete(id);
+  }
+
+  async listCourseProgress(options?: { studentId?: string, courseId?: string }): Promise<CourseProgress[]> {
+    let progress = Array.from(this.courseProgress.values());
+    
+    if (options?.studentId) {
+      progress = progress.filter(p => p.studentId === options.studentId);
+    }
+    
+    if (options?.courseId) {
+      progress = progress.filter(p => p.courseId === options.courseId);
+    }
+    
+    return progress;
   }
 }
 

@@ -19,6 +19,7 @@ export class MongoDBStorage implements IStorage {
   private tests: Collection<Test>;
   private assignments: Collection<Assignment>;
   private results: Collection<Result>;
+  private courseProgress: Collection<CourseProgress>;
   
   constructor(uri: string) {
     this.client = new MongoClient(uri);
@@ -40,6 +41,7 @@ export class MongoDBStorage implements IStorage {
       this.tests = db.collection('tests');
       this.assignments = db.collection('assignments');
       this.results = db.collection('results');
+      this.courseProgress = db.collection('courseProgress');
       
       // Create indexes
       await this.users.createIndex({ email: 1 }, { unique: true });
@@ -466,5 +468,63 @@ export class MongoDBStorage implements IStorage {
     }
     
     return this.results.find(query).toArray();
+  }
+
+  // Course Progress methods
+  async getCourseProgress(id: string): Promise<CourseProgress | null> {
+    await this.connect();
+    return this.courseProgress.findOne({ _id: id });
+  }
+
+  async getCourseProgressByStudentAndCourse(studentId: string, courseId: string): Promise<CourseProgress | null> {
+    await this.connect();
+    return this.courseProgress.findOne({ studentId, courseId });
+  }
+
+  async createCourseProgress(progressData: InsertCourseProgress): Promise<CourseProgress> {
+    await this.connect();
+    const now = new Date();
+    const progress: CourseProgress = {
+      ...progressData,
+      createdAt: now,
+      updatedAt: now
+    };
+    const result = await this.courseProgress.insertOne(progress);
+    return { ...progress, _id: result.insertedId.toString() };
+  }
+
+  async updateCourseProgress(id: string, progressData: Partial<CourseProgress>): Promise<CourseProgress | null> {
+    await this.connect();
+    const update = {
+      ...progressData,
+      updatedAt: new Date()
+    };
+    const result = await this.courseProgress.findOneAndUpdate(
+      { _id: id },
+      { $set: update },
+      { returnDocument: 'after' }
+    );
+    return result.value;
+  }
+
+  async deleteCourseProgress(id: string): Promise<boolean> {
+    await this.connect();
+    const result = await this.courseProgress.deleteOne({ _id: id });
+    return result.deletedCount > 0;
+  }
+
+  async listCourseProgress(options?: { studentId?: string, courseId?: string }): Promise<CourseProgress[]> {
+    await this.connect();
+    const query: any = {};
+    
+    if (options?.studentId) {
+      query.studentId = options.studentId;
+    }
+    
+    if (options?.courseId) {
+      query.courseId = options.courseId;
+    }
+    
+    return this.courseProgress.find(query).toArray();
   }
 }

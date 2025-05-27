@@ -332,7 +332,7 @@ export default function Classes() {
           setSelectedClass(null);
         }
       }}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{selectedClass ? 'Edit Class' : 'Create New Class'}</DialogTitle>
             <DialogDescription>
@@ -342,7 +342,7 @@ export default function Classes() {
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 overflow-y-auto pr-6 -mr-6">
               <FormField
                 control={form.control}
                 name="title"
@@ -532,20 +532,20 @@ export default function Classes() {
                   </div>
                 </div>
               )}
-              
-              <DialogFooter>
-                <Button 
-                  type="submit" 
-                  disabled={createClassMutation.isPending || updateClassMutation.isPending}
-                >
-                  {(createClassMutation.isPending || updateClassMutation.isPending) && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  {selectedClass ? 'Update Class' : 'Create Class'}
-                </Button>
-              </DialogFooter>
             </form>
           </Form>
+          <DialogFooter className="mt-4">
+            <Button 
+              type="submit" 
+              disabled={createClassMutation.isPending || updateClassMutation.isPending}
+              onClick={form.handleSubmit(onSubmit)}
+            >
+              {(createClassMutation.isPending || updateClassMutation.isPending) && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              {selectedClass ? 'Update Class' : 'Create Class'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </AdminLayout>

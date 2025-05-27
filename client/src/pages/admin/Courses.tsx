@@ -230,11 +230,9 @@ export default function Courses() {
   };
 
   const getInstructorDetails = (course: Course) => {
-    // This is a placeholder function that would typically fetch instructor details
-    // from the user who created the course
     return {
-      name: "John Doe",
-      initials: "JD"
+      name: course.instructor?.name || 'Unknown Instructor',
+      initials: course.instructor?.initials || 'UI'
     };
   };
 
@@ -309,7 +307,7 @@ export default function Courses() {
           setSelectedCourse(null);
         }
       }}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{selectedCourse ? 'Edit Course' : 'Create New Course'}</DialogTitle>
             <DialogDescription>
@@ -319,7 +317,7 @@ export default function Courses() {
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 overflow-y-auto pr-6 -mr-6">
               <FormField
                 control={form.control}
                 name="title"
@@ -562,20 +560,20 @@ export default function Courses() {
                   </div>
                 </div>
               )}
-
-              <DialogFooter>
-                <Button 
-                  type="submit" 
-                  disabled={createCourseMutation.isPending || updateCourseMutation.isPending}
-                >
-                  {(createCourseMutation.isPending || updateCourseMutation.isPending) && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  {selectedCourse ? 'Update Course' : 'Create Course'}
-                </Button>
-              </DialogFooter>
             </form>
           </Form>
+          <DialogFooter className="mt-4">
+            <Button 
+              type="submit" 
+              disabled={createCourseMutation.isPending || updateCourseMutation.isPending}
+              onClick={form.handleSubmit(onSubmit)}
+            >
+              {(createCourseMutation.isPending || updateCourseMutation.isPending) && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              {selectedCourse ? 'Update Course' : 'Create Course'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </AdminLayout>
