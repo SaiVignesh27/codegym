@@ -1,14 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link, useLocation } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import StudentLayout from '@/components/layout/StudentLayout';
-import { Assignment, Result } from '@shared/schema';
+import { Assignment, Result, Question } from '@shared/schema';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertTriangle } from 'lucide-react';
+import { useAuth } from '@/providers/AuthProvider';
+import CodeEditor from '@/components/editor/CodeEditor';
 
 export default function AssignmentView() {
   const { id } = useParams();
@@ -16,6 +20,14 @@ export default function AssignmentView() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+
+  // Define handleAnswerChange at the top of the component
+  const handleAnswerChange = (index: number, value: string) => {
+    setAnswers(prev => ({
+      ...prev,
+      [index]: value
+    }));
+  };
 
   const { data: assignment, isLoading } = useQuery<Assignment>({
     queryKey: [`/api/student/assignments/${id}`],
@@ -28,7 +40,19 @@ export default function AssignmentView() {
       // Calculate score
       const questionResults = assignment.questions.map((question, index) => {
         const answer = answers[question._id || index.toString()];
-        const isCorrect = answer === question.correctAnswer;
+        let isCorrect = false;
+
+        if (question.type === 'code') {
+          // For code questions, normalize both answers by removing extra whitespace
+          const normalizedAnswer = answer?.replace(/\s+/g, ' ').trim();
+          const normalizedCorrectAnswer = typeof question.correctAnswer === 'string' 
+            ? question.correctAnswer.replace(/\s+/g, ' ').trim()
+            : '';
+          isCorrect = normalizedAnswer === normalizedCorrectAnswer;
+        } else {
+          isCorrect = answer === question.correctAnswer;
+        }
+
         const points = isCorrect ? (question.points || 1) : 0;
         return {
           questionId: question._id || index.toString(),
@@ -75,73 +99,61 @@ export default function AssignmentView() {
     setIsSubmitting(false);
   };
 
+  // Initialize answers with template code when assignment loads
+  useEffect(() => {
+    if (assignment?.questions) {
+      const initialAnswers: Record<string, string> = {};
+      assignment.questions.forEach((question, index) => {
+        if (question.type === 'code') {
+          initialAnswers[index] = question.codeTemplate || '';
+        }
+      });
+      setAnswers(initialAnswers);
+    }
+  }, [assignment]);
+
   // Render question based on type
-  const renderQuestion = (question: any, index: number) => {
+  const renderQuestion = (question: Question, index: number) => {
     switch (question.type) {
       case 'mcq':
         return (
           <RadioGroup
-            value={answers[question._id || index.toString()]}
-            onValueChange={(value) =>
-              setAnswers(prev => ({
-                ...prev,
-                [question._id || index.toString()]: value
-              }))
-            }
+            value={answers[index] || ''}
+            onValueChange={(value) => handleAnswerChange(index, value)}
+            className="space-y-2"
           >
-            {question.options?.map((option: string, optIndex: number) => (
-              <div key={optIndex} className="flex items-center space-x-2">
-                <RadioGroupItem
-                  value={option}
-                  id={`q${index}-opt${optIndex}`}
-                />
-                <Label htmlFor={`q${index}-opt${optIndex}`}>{option}</Label>
+            {question.options?.map((option: string, optionIndex: number) => (
+              <div key={optionIndex} className="flex items-center space-x-2">
+                <RadioGroupItem value={option} id={`q${index}-o${optionIndex}`} />
+                <Label htmlFor={`q${index}-o${optionIndex}`}>{option}</Label>
               </div>
             ))}
           </RadioGroup>
         );
-      
       case 'fill':
         return (
           <textarea
-            className="w-full p-2 border rounded-md dark:bg-gray-800"
-            rows={4}
-            placeholder="Enter your answer here..."
-            value={answers[question._id || index.toString()] || ''}
-            onChange={(e) => setAnswers(prev => ({
-              ...prev,
-              [question._id || index.toString()]: e.target.value
-            }))}
+            value={answers[index] || ''}
+            onChange={(e) => handleAnswerChange(index, e.target.value)}
+            className="w-full min-h-[100px] p-2 border rounded"
+            placeholder="Type your answer here..."
           />
         );
-
       case 'code':
         return (
-          <textarea
-            className="w-full p-2 border rounded-md font-mono dark:bg-gray-800"
-            rows={8}
-            placeholder="Write your code here..."
-            value={answers[question._id || index.toString()] || ''}
-            onChange={(e) => setAnswers(prev => ({
-              ...prev,
-              [question._id || index.toString()]: e.target.value
-            }))}
-          />
+          <div className="space-y-4">
+            <CodeEditor
+              value={answers[index] || ''}
+              onChange={(value) => handleAnswerChange(index, value)}
+              language="java"
+              placeholder="Write your code here..."
+              className="min-h-[200px]"
+              templateCode={question.codeTemplate || ''}
+            />
+          </div>
         );
-
       default:
-        return (
-          <textarea
-            className="w-full p-2 border rounded-md dark:bg-gray-800"
-            rows={4}
-            placeholder="Enter your answer here..."
-            value={answers[question._id || index.toString()] || ''}
-            onChange={(e) => setAnswers(prev => ({
-              ...prev,
-              [question._id || index.toString()]: e.target.value
-            }))}
-          />
-        );
+        return null;
     }
   };
 

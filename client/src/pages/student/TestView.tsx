@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useLocation, Link } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import StudentLayout from '@/components/layout/StudentLayout';
-import { Test, Result } from '@shared/schema';
+import { Test, Result, Question } from '@shared/schema';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Loader2, ArrowLeft, Timer, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { apiRequest } from '@/lib/queryClient';
+import CodeEditor from '@/components/editor/CodeEditor';
 
 export default function TestView() {
   const { id } = useParams();
@@ -26,45 +27,10 @@ export default function TestView() {
   });
 
   // Fetch the student's result for this test
-  const { data: resultData, isLoading: isResultLoading } = useQuery({
+  const { data: resultData, isLoading: isResultLoading } = useQuery<{ result: Result }>({
     queryKey: [`/api/student/tests/${id}/results`],
     retry: false,
   });
-
-  // If result exists, redirect to results page
-  React.useEffect(() => {
-    if (resultData && resultData.result) {
-      setLocation(`/student/tests/${id}/results`);
-    }
-  }, [resultData, id, setLocation]);
-
-  // Start timer when test loads
-  React.useEffect(() => {
-    if (test?.timeLimit) {
-      setTimeLeft(test.timeLimit * 60); // Convert to seconds
-    }
-  }, [test]);
-
-  // Timer countdown
-  React.useEffect(() => {
-    if (timeLeft === null) return;
-    if (timeLeft <= 0) {
-      handleSubmit();
-      return;
-    }
-
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => (prev !== null ? prev - 1 : null));
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [timeLeft]);
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   const submitTest = useMutation({
     mutationFn: async () => {
@@ -141,6 +107,106 @@ export default function TestView() {
     setIsSubmitting(false);
   };
 
+  // If result exists, redirect to results page
+  React.useEffect(() => {
+    if (resultData?.result) {
+      setLocation(`/student/tests/${id}/results`);
+    }
+  }, [resultData, id, setLocation]);
+
+  // Start timer when test loads
+  React.useEffect(() => {
+    if (test?.timeLimit) {
+      setTimeLeft(test.timeLimit * 60); // Convert to seconds
+    }
+  }, [test]);
+
+  // Timer countdown
+  React.useEffect(() => {
+    if (timeLeft === null) return;
+    if (timeLeft <= 0) {
+      handleSubmit();
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => (prev !== null ? prev - 1 : null));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [timeLeft, handleSubmit]);
+
+  // Initialize answers with template code when test loads
+  React.useEffect(() => {
+    if (test?.questions) {
+      const initialAnswers: Record<string, string> = {};
+      test.questions.forEach((question, index) => {
+        if (question.type === 'code') {
+          initialAnswers[index] = question.codeTemplate || '';
+        }
+      });
+      setAnswers(initialAnswers);
+    }
+  }, [test]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Render question based on type
+  const renderQuestion = (question: Question, index: number) => {
+    switch (question.type) {
+      case 'mcq':
+        return (
+          <RadioGroup
+            value={answers[index] || ''}
+            onValueChange={(value) => handleAnswerChange(index, value)}
+            className="space-y-2"
+          >
+            {question.options?.map((option: string, optionIndex: number) => (
+              <div key={optionIndex} className="flex items-center space-x-2">
+                <RadioGroupItem value={option} id={`q${index}-o${optionIndex}`} />
+                <Label htmlFor={`q${index}-o${optionIndex}`}>{option}</Label>
+              </div>
+            ))}
+          </RadioGroup>
+        );
+      case 'fill':
+        return (
+          <textarea
+            value={answers[index] || ''}
+            onChange={(e) => handleAnswerChange(index, e.target.value)}
+            className="w-full min-h-[100px] p-2 border rounded"
+            placeholder="Type your answer here..."
+          />
+        );
+      case 'code':
+        return (
+          <div className="space-y-4">
+            <CodeEditor
+              value={answers[index] || ''}
+              onChange={(value) => handleAnswerChange(index, value)}
+              language="javascript"
+              placeholder="Write your code here..."
+              className="min-h-[200px]"
+              templateCode={question.codeTemplate || ''}
+            />
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const handleAnswerChange = (index: number, value: string) => {
+    setAnswers(prev => ({
+      ...prev,
+      [index]: value
+    }));
+  };
+
   React.useEffect(() => {
     if (isTestSubmitted) {
       setLocation(`/student/tests/${id}/results`);
@@ -212,25 +278,7 @@ export default function TestView() {
               </CardHeader>
               <CardContent>
                 <p className="mb-4">{question.text}</p>
-                <RadioGroup
-                  value={answers[question._id || index.toString()]}
-                  onValueChange={(value) =>
-                    setAnswers(prev => ({
-                      ...prev,
-                      [question._id || index.toString()]: value
-                    }))
-                  }
-                >
-                  {question.options?.map((option, optIndex) => (
-                    <div key={optIndex} className="flex items-center space-x-2">
-                      <RadioGroupItem
-                        value={option}
-                        id={`q${index}-opt${optIndex}`}
-                      />
-                      <Label htmlFor={`q${index}-opt${optIndex}`}>{option}</Label>
-                    </div>
-                  ))}
-                </RadioGroup>
+                {renderQuestion(question, index)}
               </CardContent>
             </Card>
           ))}
