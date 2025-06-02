@@ -9,6 +9,10 @@ import { Loader2, ArrowLeft } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertTriangle } from 'lucide-react';
+import { useAuth } from '@/providers/AuthProvider';
+import CodeEditor from '@/components/editor/CodeEditor';
 
 export default function AssignmentView() {
   const { id } = useParams();
@@ -28,11 +32,31 @@ export default function AssignmentView() {
       // Calculate score
       const questionResults = assignment.questions.map((question, index) => {
         const answer = answers[question._id || index.toString()];
-        const isCorrect = answer === question.correctAnswer;
+        let processedAnswer = answer;
+        let isCorrect = false;
+
+        if (question.type === 'code') {
+          // For code questions, parse the answer and use only the output
+          try {
+            const parsedAnswer = JSON.parse(answer);
+            processedAnswer = parsedAnswer.output;
+            const correctAnswer = typeof question.correctAnswer === 'string' ? question.correctAnswer : '';
+            isCorrect = processedAnswer.trim() === correctAnswer.trim();
+          } catch (e) {
+            // If parsing fails, use the raw answer
+            processedAnswer = answer;
+            const correctAnswer = typeof question.correctAnswer === 'string' ? question.correctAnswer : '';
+            isCorrect = answer.trim() === correctAnswer.trim();
+          }
+        } else {
+          // For non-code questions
+          isCorrect = answer === question.correctAnswer;
+        }
+
         const points = isCorrect ? (question.points || 1) : 0;
         return {
           questionId: question._id || index.toString(),
-          answer,
+          answer: processedAnswer,
           isCorrect,
           points,
         };
@@ -117,15 +141,23 @@ export default function AssignmentView() {
 
       case 'code':
         return (
-          <textarea
-            className="w-full p-2 border rounded-md font-mono dark:bg-gray-800"
-            rows={8}
-            placeholder="Write your code here..."
-            value={answers[question._id || index.toString()] || ''}
-            onChange={(e) => setAnswers(prev => ({
-              ...prev,
-              [question._id || index.toString()]: e.target.value
-            }))}
+          <CodeEditor
+            initialCode={question.codeTemplate || ''}
+            language="java" // Default to Java
+            readOnly={false}
+            question={question.text}
+            description={question.description}
+            onSubmit={(code, languageId, result) => {
+              // Store both the code and its output
+              const answer = {
+                code: code,
+                output: result.stdout || result.stderr || result.compile_output || 'No output'
+              };
+              setAnswers(prev => ({
+                ...prev,
+                [question._id || index.toString()]: JSON.stringify(answer)
+              }));
+            }}
           />
         );
 

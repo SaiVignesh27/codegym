@@ -76,7 +76,38 @@ export interface AssignmentStatus {
 export interface TestStatus {
   _id: string;
   title: string;
+  courseId: string;
   courseTitle: string;
-  questions: number;
-  status: 'pending' | 'completed';
+  status: 'pending' | 'completed' | 'overdue';
+  dueDate?: string;
+  questions?: number;
+  score?: number;
+}
+
+export interface Question {
+  type: 'fill' | 'code' | 'mcq';
+  points: number;
+  text: string;
+  correctAnswer: string | string[];
+  _id?: string;
+  options?: string[];
+  codeTemplate?: string;
+  testCases?: {
+    input: string;
+    expectedOutput: string;
+  }[];
+}
+
+export interface Test {
+  _id?: string;
+  courseId: string;
+  title: string;
+  createdBy: string;
+  visibility: 'public' | 'private';
+  questions: Question[];
+  dueDate?: string;
+  timeWindow?: {
+    startTime: string;
+    endTime: string;
+  };
 }

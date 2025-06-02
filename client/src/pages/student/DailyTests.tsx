@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import StudentLayout from "@/components/layout/StudentLayout";
-import { Test, Result } from "@shared/schema";
+import { Test, Result, Course, User } from "@shared/schema";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import axios from "axios";
+import { useAuth } from "@/hooks/useAuth";
 
 import {
   Card,
@@ -35,6 +36,7 @@ import {
   Star,
   Calendar,
 } from "lucide-react";
+import { mongoStorage } from "server";
 
 // Interface for test with optional result, completion status, and score
 interface TestWithResult extends Test {
@@ -46,10 +48,10 @@ interface TestWithResult extends Test {
 export default function DailyTests() {
   const [searchQuery, setSearchQuery] = useState("");
   const [courseFilter, setCourseFilter] = useState("all");
+  const { user } = useAuth();
 
   // Fetch courses for filter
-  const { data: courses, isLoading: isLoadingCourses } = useQuery<
-  { _id: string; title: string }[]>({
+  const { data: courses, isLoading: isLoadingCourses } = useQuery<Course[]>({
     queryKey: ["/api/student/courses"],
   });
 
@@ -78,7 +80,7 @@ export default function DailyTests() {
     });
   }, [tests, results]);
 
-  // Filter tests based on search query and course filter
+  // Filter tests based on search query, course filter, and course access
   const filteredTests = React.useMemo(() => {
     return testsWithResults.filter((test) => {
       const matchesSearch = test.title
@@ -86,9 +88,21 @@ export default function DailyTests() {
         .includes(searchQuery.toLowerCase());
       const matchesCourse =
         courseFilter === "all" || test.courseId === courseFilter;
-      return matchesSearch && matchesCourse;
+      
+      // Get the course for this test
+      const course = courses?.find(c => c._id === test.courseId);
+      
+      // Only show tests if:
+      // 1. Course is public, OR
+      // 2. Course is private and student is assigned to it
+      const hasAccess = course && (
+        course.visibility === 'public' || 
+        (course.visibility === 'private' && course.assignedTo?.includes(user?._id || ''))
+      );
+      
+      return matchesSearch && matchesCourse && hasAccess;
     });
-  }, [testsWithResults, searchQuery, courseFilter]);
+  }, [testsWithResults, searchQuery, courseFilter, courses, user?._id]);
 
   // Separate pending and completed tests
   const pendingTests = filteredTests.filter((test) => !test.isCompleted);
@@ -137,8 +151,8 @@ export default function DailyTests() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Courses</SelectItem>
-              {courses?.map((course) => (
-                <SelectItem key={course._id} value={course._id}>
+              {courses?.filter(course => course._id).map((course) => (
+                <SelectItem key={course._id || ''} value={course._id || ''}>
                   {course.title}
                 </SelectItem>
               ))}

@@ -2,9 +2,15 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { MongoDBStorage } from "./mongodb";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 // Initialize MongoDB with the provided connection string
-const MONGODB_URI = "mongodb+srv://saivigneshkadiri:sai12345@codegym.bpmjmxr.mongodb.net/?retryWrites=true&w=majority&appName=codegym";
+const MONGODB_URI = process.env.MONGO_URI;
+if (!MONGODB_URI) {
+  throw new Error("MONGODB_URI is not defined");
+}
 export const mongoStorage = new MongoDBStorage(MONGODB_URI);
 
 const app = express();
@@ -69,12 +75,12 @@ app.use((req, res, next) => {
   // ALWAYS serve the app on port 5000
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = 5000;
+  const port = process.env.PORT;
   server.listen({
     port,
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
-    log(`serving on port ${port}`);
+    log(`http://localhost:${port}`)
   });
 })();

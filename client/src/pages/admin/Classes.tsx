@@ -128,7 +128,12 @@ export default function Classes() {
         title: selectedClass.title,
         description: selectedClass.description || '',
         courseId: selectedClass.courseId,
-        content: selectedClass.content,
+        content: {
+          type: selectedClass.content.type === 'video' || selectedClass.content.type === 'document' 
+            ? selectedClass.content.type 
+            : 'video',
+          url: selectedClass.content.url
+        },
         visibility: selectedClass.visibility,
         assignedTo: selectedClass.assignedTo || [],
       });
@@ -485,7 +490,7 @@ export default function Classes() {
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="public">Public (all students)</SelectItem>
-                        <SelectItem value="private">Private (selected students only)</SelectItem>
+                        <SelectItem value="private">Private (Admins only)</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -493,7 +498,7 @@ export default function Classes() {
                 )}
               />
               
-              {form.watch('visibility') === 'private' && (
+              {/* {form.watch('visibility') === 'private' && (
                 <div>
                   <Label>Assign to Students</Label>
                   <div className="mt-2 border rounded-md p-4 max-h-60 overflow-y-auto">
@@ -531,7 +536,7 @@ export default function Classes() {
                     )}
                   </div>
                 </div>
-              )}
+              )} */}
             </form>
           </Form>
           <DialogFooter className="mt-4">

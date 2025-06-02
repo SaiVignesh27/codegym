@@ -1,216 +1,286 @@
-import React, { useState } from 'react';
-import { apiRequest } from '@/lib/queryClient';
-import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import React, { useState, useEffect } from 'react';
+import Editor from '@monaco-editor/react';
+import { Button, Select, message, Card, Progress, Space, Typography } from 'antd';
+import { PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import { CodeExecutionResult } from '@shared/types';
+import { apiRequest } from '@/lib/queryClient';
 
-// Language options for the code editor
-const LANGUAGES = [
-  { id: 63, name: 'JavaScript (Node.js v14.16.0)' },
-  { id: 71, name: 'Python (3.9.0)' },
-  { id: 62, name: 'Java (JDK 14.0.1)' },
-  { id: 52, name: 'C++ (GCC 9.2.0)' },
-  { id: 51, name: 'C (GCC 9.2.0)' },
-];
+const { Option } = Select;
+const { Text, Title } = Typography;
+
+interface Language {
+  id: number;
+  name: string;
+  version?: string;
+}
+
+interface TestResult {
+  passed: boolean;
+  input: string;
+  expectedOutput: string;
+  actualOutput: string;
+  executionTime: number;
+  error?: string;
+}
 
 interface CodeEditorProps {
-  initialCode?: string;
-  language?: number;
+  initialCode: string;
+  language?: string;
   readOnly?: boolean;
   question?: string;
   description?: string;
+  testCases?: string[];
+  questionId?: string;
   onSubmit?: (code: string, languageId: number, result: CodeExecutionResult) => void;
 }
 
-export default function CodeEditor({
+const languages: Language[] = [
+  { id: 71, name: 'Python', version: '3.11.4' },
+  { id: 62, name: 'Java', version: '17' },
+];
+
+const CodeEditor: React.FC<CodeEditorProps> = ({
   initialCode = '',
-  language = 63, // Default to JavaScript
+  language = 'java',
   readOnly = false,
   question,
   description,
+  testCases = [],
+  questionId,
   onSubmit
-}: CodeEditorProps) {
+}) => {
   const [code, setCode] = useState(initialCode);
-  const [selectedLanguage, setSelectedLanguage] = useState(language);
-  const [output, setOutput] = useState<string>('');
+  const [selectedLanguage, setSelectedLanguage] = useState('java');
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [result, setResult] = useState<CodeExecutionResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [output, setOutput] = useState('');
+  const [testResults, setTestResults] = useState<TestResult[]>([]);
+  const [score, setScore] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [runResult, setRunResult] = useState<CodeExecutionResult | null>(null);
 
-  // Handler for language change
-  const handleLanguageChange = (value: string) => {
-    setSelectedLanguage(Number(value));
+  const handleExecute = async () => {
+    try {
+      setIsExecuting(true);
+      setError(null);
+
+      // Submit code to Judge0
+      const response = await apiRequest('POST', '/api/code/execute', {
+        code,
+        language: selectedLanguage,
+      });
+
+      const { token } = await response.json();
+
+      // Poll for results
+      let submissionResult = null;
+      let attempts = 0;
+      const maxAttempts = 10;
+
+      while (attempts < maxAttempts) {
+        const resultResponse = await apiRequest('GET', `/api/code/result/${token}`);
+        submissionResult = await resultResponse.json();
+
+        if (submissionResult.status.id !== 1 && submissionResult.status.id !== 2) {
+          break;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        attempts++;
+      }
+
+      if (submissionResult) {
+        setResult(submissionResult);
+        // Get the output from the result
+        const output = submissionResult.stdout || submissionResult.stderr || submissionResult.compile_output || 'No output';
+        setOutput(output);
+        
+        if (onSubmit) {
+          // Pass both the code and the complete result to onSubmit
+          onSubmit(code, languages.find(l => l.name === selectedLanguage)?.id || 0, {
+            ...submissionResult,
+            output: output // Add the output to the result object
+          });
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to execute code');
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
-  // Handler for code execution
+  const handleReset = () => {
+    setCode(initialCode);
+    setOutput('');
+    setTestResults([]);
+    setScore(0);
+  };
+
   const handleRunCode = async () => {
+    if (!code) {
+      message.error('Please write some code first');
+      return;
+    }
+
+    setIsRunning(true);
+    setOutput('');
+
     try {
-      setIsRunning(true);
-      setOutput('Running code...');
-      
-      const response = await apiRequest('POST', '/api/code/execute', {
-        source_code: code,
-        language_id: selectedLanguage
-      });
-      
-      const result: CodeExecutionResult = await response.json();
-      setRunResult(result);
-      
-      let outputText = '';
-      
-      if (result.status.id === 3) { // Accepted status
-        outputText = result.stdout || 'Code executed successfully with no output.';
-      } else if (result.status.id === 6) { // Compilation error
-        outputText = `Compilation Error: ${result.compile_output || 'Unknown error'}`;
-      } else if (result.stderr) {
-        outputText = `Error: ${result.stderr}`;
-      } else if (result.message) {
-        outputText = `Error: ${result.message}`;
-      } else {
-        outputText = `Status: ${result.status.description}`;
+      const selectedLang = languages.find((lang: Language) => 
+        lang.name.toLowerCase() === selectedLanguage.toLowerCase()
+      );
+
+      if (!selectedLang) {
+        throw new Error('Selected language not supported');
       }
-      
-      setOutput(outputText);
+
+      // For Java, ensure the class name matches the file name
+      let processedCode = code;
+      if (selectedLanguage.toLowerCase() === 'java') {
+        const classNameMatch = code.match(/public\s+class\s+(\w+)/);
+        if (classNameMatch && classNameMatch[1] !== 'Main') {
+          processedCode = code.replace(/public\s+class\s+\w+/, 'public class Main');
+        }
+      }
+
+      const response = await fetch('/api/compile/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'X-User-Email': localStorage.getItem('userEmail') || ''
+        },
+        body: JSON.stringify({
+          sourceCode: processedCode,
+          languageId: selectedLang.id,
+          testCases,
+          questionId: '1'
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to run code');
+      }
+
+      const data = await response.json();
+      setOutput(data.output);
+      setTestResults(data.testResults);
+      setScore(data.score);
+
+      // Store the output in answers state if onSubmit is provided
+      if (onSubmit) {
+        const result: CodeExecutionResult = {
+          stdout: data.output,
+          stderr: null,
+          compile_output: null,
+          message: null,
+          time: data.executionTime?.toString() || '0',
+          memory: 0,
+          status: data.status || { id: 3, description: 'Accepted' }
+        };
+        onSubmit(code, selectedLang.id, result);
+      }
     } catch (error) {
-      setOutput(`Error executing code: ${(error as Error).message}`);
+      message.error(error instanceof Error ? error.message : 'Failed to run code');
     } finally {
       setIsRunning(false);
     }
   };
 
-  // Handler for code submission
-  const handleSubmit = async () => {
-    if (!onSubmit) return;
-    
-    try {
-      setIsSubmitting(true);
-      
-      const response = await apiRequest('POST', '/api/code/execute', {
-        source_code: code,
-        language_id: selectedLanguage
-      });
-      
-      const result: CodeExecutionResult = await response.json();
-      onSubmit(code, selectedLanguage, result);
-    } catch (error) {
-      setOutput(`Error submitting code: ${(error as Error).message}`);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Reset the code to initial value
-  const handleReset = () => {
-    setCode(initialCode);
-  };
-
   return (
-    <div className="bg-white dark:bg-dark-surface rounded-lg shadow-sm border border-light-border dark:border-dark-border overflow-hidden">
-      {(question || description) && (
-        <div className="border-b border-light-border dark:border-dark-border p-4">
-          {question && <h3 className="text-lg font-semibold text-gray-800 dark:text-white">{question}</h3>}
-          {description && <p className="text-sm text-gray-600 dark:text-gray-400">{description}</p>}
-        </div>
-      )}
-      
-      <div className="p-4">
-        {/* Question description if provided */}
-        {question && !description && (
-          <div className="bg-gray-50 dark:bg-dark-border p-4 rounded-md mb-4">
-            <h4 className="font-medium text-gray-800 dark:text-white mb-2">Question: {question}</h4>
-          </div>
-        )}
-        
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center space-x-2">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Language:</span>
-              <Select 
-                value={selectedLanguage.toString()} 
-                onValueChange={handleLanguageChange}
-                disabled={readOnly}
-              >
-                <SelectTrigger className="w-[180px] text-sm">
-                  <SelectValue placeholder="Select language" />
-                </SelectTrigger>
-                <SelectContent>
-                  {LANGUAGES.map(lang => (
-                    <SelectItem key={lang.id} value={lang.id.toString()}>
-                      {lang.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleRunCode}
-                disabled={isRunning || readOnly}
-                className="mr-2"
-              >
-                {isRunning ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : 'Run'}
-              </Button>
-              
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleReset}
-                disabled={readOnly}
-              >
-                Reset
-              </Button>
-            </div>
-          </div>
-          
-          {/* Code Editor */}
-          <div className="border border-light-border dark:border-dark-border rounded-md overflow-hidden">
-            <div className="bg-gray-100 dark:bg-gray-800 px-4 py-1 text-xs font-mono border-b border-light-border dark:border-dark-border flex justify-between">
-              <span>code.{
-                selectedLanguage === 63 ? 'js' :
-                selectedLanguage === 71 ? 'py' :
-                selectedLanguage === 62 ? 'java' :
-                selectedLanguage === 52 || selectedLanguage === 51 ? 'c' : 'txt'
-              }</span>
-              <span className="text-gray-500">Judge0 API integration</span>
-            </div>
-            
-            <textarea
-              className="code-editor w-full bg-gray-50 dark:bg-dark-surface font-mono text-sm p-4 h-60 resize-none focus:outline-none text-gray-800 dark:text-gray-200"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
+    <div className="code-editor">
+      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        <Card>
+          <Space>
+            <Select
+              value={selectedLanguage}
+              onChange={setSelectedLanguage}
+              style={{ width: 200 }}
               disabled={readOnly}
-              spellCheck={false}
-            />
-          </div>
-        </div>
-        
-        {/* Output section */}
-        {(output || isRunning) && (
-          <div className="mt-6">
-            <h4 className="font-medium text-gray-800 dark:text-white mb-2">Output:</h4>
-            <div className="bg-gray-900 text-gray-200 p-4 rounded-md font-mono text-sm h-32 overflow-y-auto">
-              <pre>{output}</pre>
-            </div>
-          </div>
-        )}
-        
-        {/* Submit button */}
-        {onSubmit && (
-          <div className="mt-6 flex justify-end">
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting || readOnly}
+              defaultValue="java"
             >
-              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Submit Answer
+              {languages.map(lang => (
+                <Option key={lang.id} value={lang.name.toLowerCase()}>
+                  {lang.name}
+                </Option>
+              ))}
+            </Select>
+            <Button
+              type="primary"
+              icon={<PlayCircleOutlined />}
+              onClick={handleRunCode}
+              loading={isRunning}
+              disabled={readOnly}
+            >
+              Run Code
             </Button>
-          </div>
-        )}
-      </div>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={handleReset}
+              disabled={readOnly}
+            >
+              Reset
+            </Button>
+            {onSubmit && (
+              <Button
+                type="primary"
+                icon={<CheckCircleOutlined />}
+                onClick={handleExecute}
+                disabled={readOnly || score < 100}
+              >
+                Submit
+              </Button>
+            )}
+          </Space>
+        </Card>
+
+        <Card>
+          <Editor
+            height="400px"
+            language={selectedLanguage}
+            value={code}
+            onChange={(value: string | undefined) => setCode(value || '')}
+            options={{
+              readOnly,
+              minimap: { enabled: false },
+              fontSize: 14,
+              lineNumbers: 'on',
+              roundedSelection: false,
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
+            }}
+          />
+        </Card>
+
+        <Card>
+          <Title level={4}>Output</Title>
+          {testResults.length > 0 && (
+            <>
+              <Progress
+                percent={score}
+                status={score === 100 ? 'success' : 'active'}
+                format={(percent?: number) => `${percent || 0}%`}
+              />
+              <Text>
+                Passed {testResults.filter(t => t.passed).length} of {testResults.length} test cases
+              </Text>
+            </>
+          )}
+          <pre style={{ 
+            marginTop: 16,
+            padding: 16,
+            backgroundColor: '#f5f5f5',
+            borderRadius: 4,
+            maxHeight: '300px',
+            overflow: 'auto'
+          }}>
+            {output || 'No output yet'}
+          </pre>
+        </Card>
+      </Space>
     </div>
   );
-}
+};
+
+export default CodeEditor;

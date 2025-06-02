@@ -1,4 +1,4 @@
-import { User, Course, Class, Test, Assignment, Result, InsertUser, InsertCourse, InsertClass, InsertTest, InsertAssignment, InsertResult, CourseProgress } from '@shared/schema';
+import { User, Course, Class, Test, Assignment, Result, InsertUser, InsertCourse, InsertClass, InsertTest, InsertAssignment, InsertResult, CourseProgress, InsertCourseProgress } from '@shared/schema';
 import { ObjectId } from 'mongodb';
 import * as bcrypt from 'bcrypt';
 
@@ -45,7 +45,13 @@ export interface IStorage {
   createResult(result: InsertResult): Promise<Result>;
   updateResult(id: string, result: Partial<Result>): Promise<Result | null>;
   deleteResult(id: string): Promise<boolean>;
-  listResults(options?: { studentId?: string, courseId?: string, testId?: string, assignmentId?: string }): Promise<Result[]>;
+  listResults(options?: { 
+    studentId?: string, 
+    courseId?: string, 
+    testId?: string, 
+    assignmentId?: string,
+    type?: 'test' | 'assignment'
+  }): Promise<Result[]>;
 
   // Course Progress methods
   getCourseProgress(id: string): Promise<CourseProgress | null>;
@@ -74,52 +80,16 @@ export class MemStorage implements IStorage {
     this.assignments = new Map();
     this.results = new Map();
     this.courseProgress = new Map();
-    
-    // Seed an initial admin user
-    this.seedAdminUser();
   }
   
-  private async seedAdminUser() {
-    const hashedPassword = await bcrypt.hash('admin123', 10);
-    const adminId = new ObjectId().toString();
-    
-    const admin: User = {
-      _id: adminId,
-      name: 'Admin User',
-      email: 'admin@codegym.com',
-      password: hashedPassword,
-      role: 'admin'
-    };
-    
-    this.users.set(adminId, admin);
-    
-    // Also seed a student user for testing
-    const studentId = new ObjectId().toString();
-    const studentPassword = await bcrypt.hash('student123', 10);
-    
-    const student: User = {
-      _id: studentId,
-      name: 'Student User',
-      email: 'student@codegym.com',
-      password: studentPassword,
-      role: 'student'
-    };
-    
-    this.users.set(studentId, student);
-  }
-
+  
   // User methods
   async getUser(id: string): Promise<User | null> {
     return this.users.get(id) || null;
   }
 
   async getUserByEmail(email: string): Promise<User | null> {
-    for (const user of this.users.values()) {
-      if (user.email === email) {
-        return user;
-      }
-    }
-    return null;
+    return Array.from(this.users.values()).find(user => user.email === email) || null;
   }
 
   async createUser(userData: InsertUser): Promise<User> {
@@ -416,7 +386,13 @@ export class MemStorage implements IStorage {
     return this.results.delete(id);
   }
 
-  async listResults(options?: { studentId?: string, courseId?: string, testId?: string, assignmentId?: string }): Promise<Result[]> {
+  async listResults(options?: { 
+    studentId?: string, 
+    courseId?: string, 
+    testId?: string, 
+    assignmentId?: string,
+    type?: 'test' | 'assignment'
+  }): Promise<Result[]> {
     let results = Array.from(this.results.values());
     
     if (options?.studentId) {

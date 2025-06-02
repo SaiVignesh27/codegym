@@ -37,7 +37,6 @@ import { Progress } from '@/components/ui/progress';
 // Form schema for profile update
 const profileFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  email: z.string().email("Invalid email address"),
 });
 
 // Form schema for password update
@@ -50,7 +49,10 @@ const passwordFormSchema = z.object({
   path: ["confirmPassword"],
 });
 
-type ProfileFormValues = z.infer<typeof profileFormSchema>;
+type ProfileFormValues = {
+  name: string;
+};
+
 type PasswordFormValues = z.infer<typeof passwordFormSchema>;
 
 export default function Profile() {
@@ -113,7 +115,6 @@ export default function Profile() {
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
       name: '',
-      email: '',
     },
   });
 
@@ -132,7 +133,6 @@ export default function Profile() {
     if (profile) {
       profileForm.reset({
         name: profile.name,
-        email: profile.email,
       });
     }
   }, [profile, profileForm]);
@@ -266,22 +266,11 @@ export default function Profile() {
                         )}
                       />
                       
-                      <FormField
-                        control={profileForm.control}
-                        name="email"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Email Address</FormLabel>
-                            <FormControl>
-                              <div className="flex items-center">
-                                <Mail className="mr-2 h-4 w-4 text-gray-500" />
-                                <Input {...field} />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                      <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
+                        <Mail className="h-4 w-4" />
+                        <p className="text-gray-500 dark:text-gray-400">{profile?.email}</p>
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Email can only be changed by administrator</p>
                       
                       <Button 
                         type="submit" 

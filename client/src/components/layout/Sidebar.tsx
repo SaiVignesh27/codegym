@@ -147,12 +147,12 @@ export default function Sidebar() {
                 label="Profile" 
                 isActive={isActive("/admin/profile")} 
               />
-              <NavItem 
+              {/* <NavItem 
                 href="/admin/settings" 
                 icon={<Settings />}
                 label="Settings" 
                 isActive={isActive("/admin/settings")} 
-              />
+              /> */}
               <NavItem 
                 href="/logout" 
                 icon={<LogOut />}
@@ -182,14 +182,12 @@ export default function Sidebar() {
                 href="/student/daily-tests" 
                 icon={<FileQuestion />}
                 label="Daily Tests" 
-                badge={{ count: 3, color: "bg-primary" }}
                 isActive={isActive("/student/daily-tests")} 
               />
               <NavItem 
                 href="/student/assignments" 
                 icon={<ClipboardList />}
                 label="Assignments" 
-                badge={{ count: 1, color: "bg-warning" }}
                 isActive={isActive("/student/assignments")} 
               />
               <NavItem 

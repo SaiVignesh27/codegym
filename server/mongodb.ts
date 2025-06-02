@@ -3,9 +3,12 @@ import * as bcrypt from 'bcrypt';
 import { 
   User, Course, Class, Test, Assignment, Result, 
   InsertUser, InsertCourse, InsertClass, InsertTest, InsertAssignment, InsertResult,
-  userSchema, courseSchema, classSchema, testSchema, assignmentSchema, resultSchema
+  userSchema, courseSchema, classSchema, testSchema, assignmentSchema, resultSchema,
+  CourseProgress
 } from '@shared/schema';
 import { IStorage } from './storage';
+import dotenv from 'dotenv'
+dotenv.config()
 
 export class MongoDBStorage implements IStorage {
   private client: MongoClient;
@@ -13,13 +16,13 @@ export class MongoDBStorage implements IStorage {
   private connected = false;
   
   // Collections
-  private users: Collection<User>;
-  private courses: Collection<Course>;
-  private classes: Collection<Class>;
-  private tests: Collection<Test>;
-  private assignments: Collection<Assignment>;
-  private results: Collection<Result>;
-  private courseProgress: Collection<CourseProgress>;
+  private users!: Collection<User>;
+  private courses!: Collection<Course>;
+  private classes!: Collection<Class>;
+  private tests!: Collection<Test>;
+  private assignments!: Collection<Assignment>;
+  private results!: Collection<Result>;
+  private courseProgress!: Collection<CourseProgress>;
   
   constructor(uri: string) {
     this.client = new MongoClient(uri);
@@ -71,36 +74,26 @@ export class MongoDBStorage implements IStorage {
   }
   
   private async seedAdminUser() {
-    // Check if admin user exists
-    const adminExists = await this.users.findOne({ email: 'admin@codegym.com' });
-    
-    if (!adminExists) {
-      const hashedPassword = await bcrypt.hash('admin123', 10);
+    try {
+      // Check if admin user exists
+      const adminExists = await this.users.findOne({ email: process.env.ADMINEMAIL });
       
-      const admin: User = {
-        _id: new ObjectId().toString(),
-        name: 'Admin User',
-        email: 'admin@codegym.com',
-        password: hashedPassword,
-        role: 'admin'
-      };
-      
-      await this.users.insertOne(admin);
-      console.log('Admin user seeded');
-      
-      // Also seed a student user for testing
-      const studentPassword = await bcrypt.hash('student123', 10);
-      
-      const student: User = {
-        _id: new ObjectId().toString(),
-        name: 'Student User',
-        email: 'student@codegym.com',
-        password: studentPassword,
-        role: 'student'
-      };
-      
-      await this.users.insertOne(student);
-      console.log('Student user seeded');
+      if (!adminExists) {
+        const hashedPassword = await bcrypt.hash(process.env.ADMINPASSWORD || '', 10);
+        
+        const admin: User = {
+          _id: new ObjectId().toString(),
+          name: process.env.ADMINNAME || '',
+          email: process.env.ADMINEMAIL || '',
+          password: hashedPassword,
+          role: 'admin'
+        };
+        
+        await this.users.insertOne(admin);
+      }
+    } catch (error) {
+      // Log the error but don't throw it - we don't want to break the app if seeding fails
+      console.error('Error seeding admin user:', error);
     }
   }
   
@@ -162,17 +155,44 @@ export class MongoDBStorage implements IStorage {
   }
   
   // Course methods
-  async getCourse(id: string): Promise<Course | null> {
+  async getCourse(id: string, user?: any): Promise<Course | null> {
     await this.connect();
-    return this.courses.findOne({ _id: id });
+    const course = await this.courses.findOne({ _id: id });
+
+    if (!course) {
+      return null;
+    }
+
+    if (user && user.role === 'student') {
+      // Check if student is assigned to the course
+      if (!course.assignedTo?.includes(user._id)) {
+        return null; // Student is not assigned to this course
+      }
+    }
+    // Admins can see all courses
+    
+    return course;
   }
   
   async createCourse(courseData: InsertCourse): Promise<Course> {
     await this.connect();
     
+    // Handle assignedTo based on visibility
+    let assignedTo: string[] = [];
+    if (courseData.visibility === 'public') {
+      // For public courses, get all student IDs
+      const students = await this.users.find({ role: 'student' }).toArray();
+      assignedTo = students.map(student => student._id);
+    } else if (courseData.visibility === 'private') {
+      // For private courses, use the provided assignedTo array
+      assignedTo = courseData.assignedTo || [];
+    }
+    // For restricted courses, assignedTo remains empty
+
     const course: Course = {
       _id: new ObjectId().toString(),
       ...courseData,
+      assignedTo,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -183,6 +203,27 @@ export class MongoDBStorage implements IStorage {
   
   async updateCourse(id: string, courseData: Partial<Course>): Promise<Course | null> {
     await this.connect();
+    
+    // Get the current course data
+    const currentCourse = await this.courses.findOne({ _id: id });
+    if (!currentCourse) {
+      return null;
+    }
+
+    // Handle assignedTo based on visibility
+    if (courseData.visibility) {
+      if (courseData.visibility === 'public') {
+        // For public courses, get all student IDs
+        const students = await this.users.find({ role: 'student' }).toArray();
+        courseData.assignedTo = students.map(student => student._id);
+      } else if (courseData.visibility === 'private') {
+        // For private courses, keep the provided assignedTo array or use existing one
+        courseData.assignedTo = courseData.assignedTo || currentCourse.assignedTo || [];
+      } else if (courseData.visibility === 'restricted') {
+        // For restricted courses, clear assignedTo
+        courseData.assignedTo = [];
+      }
+    }
     
     // Update the updatedAt field
     courseData.updatedAt = new Date();
@@ -203,19 +244,36 @@ export class MongoDBStorage implements IStorage {
     return result.deletedCount === 1;
   }
   
-  async listCourses(options?: { visibility?: 'public' | 'private', createdBy?: string }): Promise<Course[]> {
+  async listCourses(options?: { visibility?: 'public' | 'private' | 'restricted', createdBy?: string, user?: any }): Promise<Course[]> {
     await this.connect();
-    
+
     const query: any = {};
-    
-    if (options?.visibility) {
+
+    if (options?.user && options.user.role === 'student') {
+      if (options?.visibility === 'public') {
+        query.visibility = 'public';
+      } else if (options?.visibility === 'private') {
+        // For private courses, check if student is in assignedTo array
+        query.$and = [
+          { visibility: 'private' },
+          { assignedTo: options.user._id }
+        ];
+      } else {
+        // If no specific visibility is requested, show public + private courses where student is assigned
+        query.$or = [
+          { visibility: 'public' },
+          { $and: [{ visibility: 'private' }, { assignedTo: options.user._id }] }
+        ];
+      }
+    } else if (options?.visibility) {
+      // Admins can filter by visibility, and can see all courses including restricted ones
       query.visibility = options.visibility;
     }
-    
+
     if (options?.createdBy) {
       query.createdBy = options.createdBy;
     }
-    
+
     return this.courses.find(query).toArray();
   }
   
@@ -282,9 +340,35 @@ export class MongoDBStorage implements IStorage {
   }
   
   // Test methods
-  async getTest(id: string): Promise<Test | null> {
+  async getTest(id: string, user?: any): Promise<Test | null> {
     await this.connect();
-    return this.tests.findOne({ _id: id });
+    const test = await this.tests.findOne({ _id: id });
+
+    if (!test) {
+      return null;
+    }
+
+    // Admins can see all tests
+    if (user && user.role === 'admin') {
+        return test;
+    }
+
+    // Public tests are visible to all
+    if (test.visibility === 'public') {
+        return test;
+    }
+
+    // Students can see private tests in courses they are enrolled in
+    if (user && user.role === 'student' && test.visibility === 'private') {
+        const enrolledCourses = await this.listCourseProgress({ studentId: user._id });
+        const isEnrolled = enrolledCourses.some(cp => cp.courseId === test.courseId);
+        if (isEnrolled) {
+            return test;
+        }
+    }
+
+    // Otherwise, the user doesn't have permission
+    return null;
   }
   
   async createTest(testData: InsertTest): Promise<Test> {
@@ -323,34 +407,80 @@ export class MongoDBStorage implements IStorage {
     return result.deletedCount === 1;
   }
   
-  async listTests(options?: { courseId?: string, classId?: string, visibility?: 'public' | 'private', createdBy?: string }): Promise<Test[]> {
+  async listTests(options?: { courseId?: string, classId?: string, visibility?: 'public' | 'private', createdBy?: string, user?: any }): Promise<Test[]> {
     await this.connect();
-    
+
     const query: any = {};
-    
+
     if (options?.courseId) {
       query.courseId = options.courseId;
     }
-    
+
     if (options?.classId) {
       query.classId = options.classId;
     }
-    
-    if (options?.visibility) {
-      query.visibility = options.visibility;
+
+    if (options?.user && options.user.role === 'student') {
+      // Students can only see public tests or private tests in courses they are enrolled in
+      const enrolledCourses = await this.listCourseProgress({ studentId: options.user._id });
+      const enrolledCourseIds = enrolledCourses.map(cp => cp.courseId);
+
+      if (options?.visibility === 'public') {
+        query.visibility = 'public';
+      } else if (options?.visibility === 'private') {
+        query.$and = [
+          { visibility: 'private' },
+          { courseId: { $in: enrolledCourseIds } }
+        ];
+      } else {
+         // If no specific visibility is requested, show public + tests in enrolled private courses
+         query.$or = [
+          { visibility: 'public' },
+          { $and: [{ visibility: 'private' }, { courseId: { $in: enrolledCourseIds } }] }
+        ];
+      }
+    } else if (options?.visibility) {
+       // Admins can filter by visibility, and can see all private tests
+       query.visibility = options.visibility;
     }
-    
+
     if (options?.createdBy) {
       query.createdBy = options.createdBy;
     }
-    
+
     return this.tests.find(query).toArray();
   }
   
   // Assignment methods
-  async getAssignment(id: string): Promise<Assignment | null> {
+  async getAssignment(id: string, user?: any): Promise<Assignment | null> {
     await this.connect();
-    return this.assignments.findOne({ _id: id });
+    const assignment = await this.assignments.findOne({ _id: id });
+
+    if (!assignment) {
+      return null;
+    }
+
+    // Admins can see all assignments
+    if (user && user.role === 'admin') {
+        return assignment;
+    }
+
+    // Public assignments are visible to all
+    if (assignment.visibility === 'public') {
+        return assignment;
+    }
+
+    // Students can see private assignments in courses they are enrolled in
+    if (user && user.role === 'student' && assignment.visibility === 'private') {
+        const enrolledCourses = await this.listCourseProgress({ studentId: user._id });
+        const isEnrolled = enrolledCourses.some(cp => cp.courseId === assignment.courseId);
+        if (isEnrolled) {
+            return assignment;
+        }
+    }
+
+    // Otherwise, the user doesn't have permission
+    return null;
   }
   
   async createAssignment(assignmentData: InsertAssignment): Promise<Assignment> {
@@ -389,23 +519,43 @@ export class MongoDBStorage implements IStorage {
     return result.deletedCount === 1;
   }
   
-  async listAssignments(options?: { courseId?: string, visibility?: 'public' | 'private', createdBy?: string }): Promise<Assignment[]> {
+  async listAssignments(options?: { courseId?: string, visibility?: 'public' | 'private', createdBy?: string, user?: any }): Promise<Assignment[]> {
     await this.connect();
-    
+
     const query: any = {};
-    
+
     if (options?.courseId) {
       query.courseId = options.courseId;
     }
-    
-    if (options?.visibility) {
-      query.visibility = options.visibility;
+
+    if (options?.user && options.user.role === 'student') {
+      // Students can only see public assignments or private assignments in courses they are enrolled in
+      const enrolledCourses = await this.listCourseProgress({ studentId: options.user._id });
+      const enrolledCourseIds = enrolledCourses.map(cp => cp.courseId);
+
+      if (options?.visibility === 'public') {
+        query.visibility = 'public';
+      } else if (options?.visibility === 'private') {
+        query.$and = [
+          { visibility: 'private' },
+          { courseId: { $in: enrolledCourseIds } }
+        ];
+      } else {
+         // If no specific visibility is requested, show public + assignments in enrolled private courses
+         query.$or = [
+          { visibility: 'public' },
+          { $and: [{ visibility: 'private' }, { courseId: { $in: enrolledCourseIds } }] }
+        ];
+      }
+    } else if (options?.visibility) {
+       // Admins can filter by visibility, and can see all private assignments
+       query.visibility = options.visibility;
     }
-    
+
     if (options?.createdBy) {
       query.createdBy = options.createdBy;
     }
-    
+
     return this.assignments.find(query).toArray();
   }
   
@@ -446,7 +596,13 @@ export class MongoDBStorage implements IStorage {
     return result.deletedCount === 1;
   }
   
-  async listResults(options?: { studentId?: string, courseId?: string, testId?: string, assignmentId?: string }): Promise<Result[]> {
+  async listResults(options?: { 
+    studentId?: string, 
+    courseId?: string, 
+    testId?: string, 
+    assignmentId?: string,
+    type?: 'test' | 'assignment'
+  }): Promise<Result[]> {
     await this.connect();
     
     const query: any = {};
@@ -466,6 +622,10 @@ export class MongoDBStorage implements IStorage {
     if (options?.assignmentId) {
       query.assignmentId = options.assignmentId;
     }
+
+    if (options?.type) {
+      query.type = options.type;
+    }
     
     return this.results.find(query).toArray();
   }
@@ -481,30 +641,65 @@ export class MongoDBStorage implements IStorage {
     return this.courseProgress.findOne({ studentId, courseId });
   }
 
-  async createCourseProgress(progressData: InsertCourseProgress): Promise<CourseProgress> {
+  async createCourseProgress(progressData: CourseProgress): Promise<CourseProgress> {
     await this.connect();
     const now = new Date();
+
+    // Get the course to count total items
+    const course = await this.courses.findOne({ _id: progressData.courseId });
+    if (!course) {
+      throw new Error('Course not found');
+    }
+
+    // Count total items in the course
+    const totalItems = (course.classes?.length || 0) + 
+                      (course.tests?.length || 0) + 
+                      (course.assignments?.length || 0);
+
     const progress: CourseProgress = {
       ...progressData,
+      totalItems,
+      completedItems: [],
       createdAt: now,
       updatedAt: now
     };
+
     const result = await this.courseProgress.insertOne(progress);
     return { ...progress, _id: result.insertedId.toString() };
   }
 
   async updateCourseProgress(id: string, progressData: Partial<CourseProgress>): Promise<CourseProgress | null> {
     await this.connect();
+    
+    // Get current progress
+    const currentProgress = await this.courseProgress.findOne({ _id: id });
+    if (!currentProgress) {
+      return null;
+    }
+
+    // Get the course to count total items
+    const course = await this.courses.findOne({ _id: currentProgress.courseId });
+    if (!course) {
+      throw new Error('Course not found');
+    }
+
+    // Count total items in the course
+    const totalItems = (course.classes?.length || 0) + 
+                      (course.tests?.length || 0) + 
+                      (course.assignments?.length || 0);
+
     const update = {
       ...progressData,
+      totalItems,
       updatedAt: new Date()
     };
+
     const result = await this.courseProgress.findOneAndUpdate(
       { _id: id },
       { $set: update },
       { returnDocument: 'after' }
     );
-    return result.value;
+    return result || null;
   }
 
   async deleteCourseProgress(id: string): Promise<boolean> {

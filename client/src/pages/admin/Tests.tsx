@@ -66,12 +66,10 @@ const questionSchema = z.object({
   options: z.array(z.string()).optional(),
   correctAnswer: z.union([z.string(), z.array(z.string())]),
   codeTemplate: z.string().optional(),
-  testCases: z.array(
-    z.object({
-      input: z.string(),
-      output: z.string(),
-    })
-  ).optional(),
+  testCase: z.object({
+    input: z.string(),
+    output: z.string(),
+  }).optional(),
   points: z.number().default(1),
 });
 
@@ -378,8 +376,8 @@ export default function Tests() {
                   <FormLabel>Correct Answer</FormLabel>
                   <Select 
                     onValueChange={field.onChange} 
-                    defaultValue={field.value?.toString() || "0"}
-                    value={field.value?.toString() || "0"}
+                    defaultValue={field.value?.toString()}
+                    value={field.value?.toString()}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -445,71 +443,55 @@ export default function Tests() {
             />
 
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label>Test Cases</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const testCases = form.getValues(`questions.${index}.testCases`) || [];
-                    form.setValue(`questions.${index}.testCases`, [
-                      ...testCases,
-                      { input: '', output: '' }
-                    ]);
-                  }}
-                >
-                  <Plus className="h-4 w-4 mr-1" /> Add Test Case
-                </Button>
+              <div>
+                <Label>Test Case</Label>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Provide input and expected output for the code question
+                </p>
               </div>
 
-              {(form.getValues(`questions.${index}.testCases`) || []).map((_, testIndex) => (
-                <div key={testIndex} className="grid grid-cols-2 gap-4 p-3 border rounded-md relative">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute top-0 right-0 h-8 w-8 p-0"
-                    onClick={() => {
-                      const testCases = form.getValues(`questions.${index}.testCases`) || [];
-                      form.setValue(
-                        `questions.${index}.testCases`,
-                        testCases.filter((_, i) => i !== testIndex)
-                      );
-                    }}
-                  >
-                    <Minus className="h-4 w-4" />
-                  </Button>
+              <div className="grid grid-cols-2 gap-4 p-3 border rounded-md">
+                <FormField
+                  control={form.control}
+                  name={`questions.${index}.testCase.input`}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Input</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          className="font-mono"
+                          placeholder="Enter test input"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                  <FormField
-                    control={form.control}
-                    name={`questions.${index}.testCases.${testIndex}.input`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Input</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name={`questions.${index}.testCases.${testIndex}.output`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Expected Output</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              ))}
+                <FormField
+                  control={form.control}
+                  name={`questions.${index}.testCase.output`}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Expected Output</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          className="font-mono"
+                          placeholder="Enter expected output"
+                          {...field}
+                          onChange={(e) => {
+                            field.onChange(e);
+                            // Update correctAnswer with the output value
+                            form.setValue(`questions.${index}.correctAnswer`, e.target.value);
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </div>
           </>
         );
@@ -758,7 +740,7 @@ export default function Tests() {
                             </FormControl>
                             <SelectContent>
                               <SelectItem value="public">Public (all students)</SelectItem>
-                              <SelectItem value="private">Private (selected students only)</SelectItem>
+                              <SelectItem value="private">Private (Admins only)</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -767,7 +749,7 @@ export default function Tests() {
                     />
                   </div>
 
-                  {form.watch('visibility') === 'private' && (
+                  {/* {form.watch('visibility') === 'private' && (
                     <div>
                       <Label>Assign to Students</Label>
                       <div className="mt-2 border rounded-md p-4 max-h-60 overflow-y-auto">
@@ -805,7 +787,7 @@ export default function Tests() {
                         )}
                       </div>
                     </div>
-                  )}
+                  )} */}
                 </TabsContent>
 
                 <TabsContent value="questions" className="space-y-6 pt-4">
@@ -868,12 +850,13 @@ export default function Tests() {
                                         // Reset question fields based on type
                                         if (value === 'mcq') {
                                           form.setValue(`questions.${index}.options`, ['', '', '', '']);
-                                          form.setValue(`questions.${index}.correctAnswer`, '0');
+                                          form.setValue(`questions.${index}.correctAnswer`, '');
                                         } else if (value === 'fill') {
                                           form.setValue(`questions.${index}.correctAnswer`, '');
                                         } else if (value === 'code') {
                                           form.setValue(`questions.${index}.codeTemplate`, '');
-                                          form.setValue(`questions.${index}.testCases`, [{ input: '', output: '' }]);
+                                          form.setValue(`questions.${index}.testCase`, { input: '', output: '' });
+                                          form.setValue(`questions.${index}.correctAnswer`, '');
                                         }
                                       }} 
                                       defaultValue={field.value}

@@ -58,7 +58,10 @@ export default function TestItem({
         
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="ml-3 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">
+            <button 
+              aria-label="More options"
+              className="ml-3 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+            >
               <MoreVertical className="h-4 w-4" />
             </button>
           </DropdownMenuTrigger>
@@ -68,11 +71,11 @@ export default function TestItem({
                 Edit
               </DropdownMenuItem>
             )}
-            {onToggleStatus && (
+            {/* {onToggleStatus && (
               <DropdownMenuItem onClick={onToggleStatus}>
                 {isActive ? 'Deactivate' : 'Activate'}
               </DropdownMenuItem>
-            )}
+            )} */}
             {onDelete && (
               <DropdownMenuItem 
                 className="text-red-600 dark:text-red-400"

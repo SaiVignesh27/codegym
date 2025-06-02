@@ -4,6 +4,7 @@ import StudentLayout from '@/components/layout/StudentLayout';
 import { Assignment, Result, Course } from '@shared/schema';
 import { Link } from 'wouter';
 import { format, isAfter } from 'date-fns';
+import { useAuth } from '@/hooks/useAuth';
 
 import {
   Card,
@@ -54,6 +55,7 @@ interface AssignmentWithResult extends Assignment {
 export default function Assignments() {
   const [searchQuery, setSearchQuery] = useState('');
   const [courseFilter, setCourseFilter] = useState('all');
+  const { user } = useAuth();
   
   // Fetch available assignments
   const { data: assignments, isLoading: isLoadingAssignments } = useQuery<Assignment[]>({
@@ -76,41 +78,58 @@ export default function Assignments() {
     
     return assignments.map(assignment => {
       const result = results.find(r => r.assignmentId === assignment._id);
-      const dueDate = assignment.dueDate ? new Date(assignment.dueDate) : new Date();
-      const isOverdue = isAfter(new Date(), dueDate) && !result;
+      const dueDate = assignment.dueDate ? new Date(assignment.dueDate) : undefined;
+      const startTime = assignment.timeWindow?.startTime ? new Date(assignment.timeWindow.startTime) : undefined;
+      const endTime = assignment.timeWindow?.endTime ? new Date(assignment.timeWindow.endTime) : undefined;
+      const now = new Date();
       
       let status: 'pending' | 'in-progress' | 'completed' | 'overdue' = 'pending';
       if (result) {
         status = 'completed';
-      } else if (isOverdue) {
+      } else if (dueDate && dueDate < now) {
         status = 'overdue';
-      } else if (assignment.status === 'in-progress') {
-        status = 'in-progress';
+      } else if (startTime && endTime) {
+        if (now >= startTime && now <= endTime) {
+          status = 'in-progress';
+        } else if (now > endTime) {
+          status = 'overdue';
+        }
       }
       
       return {
         ...assignment,
         result,
         isCompleted: !!result,
-        isOverdue,
+        isOverdue: status === 'overdue',
         status,
         score: result?.score || 0,
       };
     });
   }, [assignments, results]);
   
-  // Filter assignments by search and course
+  // Filter assignments by search, course, and course access
   const filteredAssignments = React.useMemo(() => {
     return assignmentsWithResults.filter(assignment => {
       const matchesSearch = assignment.title.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCourse = courseFilter === 'all' || assignment.courseId === courseFilter;
-      return matchesSearch && matchesCourse;
+      
+      // Get the course for this assignment
+      const course = courses?.find(c => c._id === assignment.courseId);
+      
+      // Only show assignments if:
+      // 1. Course is public, OR
+      // 2. Course is private and student is assigned to it
+      const hasAccess = course && (
+        course.visibility === 'public' || 
+        (course.visibility === 'private' && course.assignedTo?.includes(user?._id || ''))
+      );
+      
+      return matchesSearch && matchesCourse && hasAccess;
     });
-  }, [assignmentsWithResults, searchQuery, courseFilter]);
+  }, [assignmentsWithResults, searchQuery, courseFilter, courses, user?._id]);
   
   // Split assignments by status
-  const pendingAssignments = filteredAssignments.filter(a => a.status === 'pending');
-  const inProgressAssignments = filteredAssignments.filter(a => a.status === 'in-progress');
+  const pendingAssignments = filteredAssignments.filter(a => a.status === 'pending' || a.status === 'in-progress');
   const completedAssignments = filteredAssignments.filter(a => a.status === 'completed');
   const overdueAssignments = filteredAssignments.filter(a => a.status === 'overdue');
   
@@ -210,9 +229,8 @@ export default function Assignments() {
         </div>
 
         <Tabs defaultValue="pending" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 md:w-[600px]">
+          <TabsList className="grid w-full grid-cols-3 md:w-[450px]">
             <TabsTrigger value="pending">Pending</TabsTrigger>
-            <TabsTrigger value="in-progress">In Progress</TabsTrigger>
             <TabsTrigger value="completed">Completed</TabsTrigger>
             <TabsTrigger value="overdue">Overdue</TabsTrigger>
           </TabsList>
@@ -233,7 +251,17 @@ export default function Assignments() {
                         </Badge>
                         <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                           <Clock className="h-4 w-4 mr-1" />
-                          <span>{assignment.dueDate ? getDaysRemaining(new Date(assignment.dueDate)) : 'No deadline'}</span>
+                          <span>
+                            {assignment.timeWindow?.endTime ? (
+                              <>
+                                {format(new Date(assignment.timeWindow.endTime), 'MMM dd, yyyy')}
+                              </>
+                            ) : assignment.dueDate ? (
+                              <>
+                                {format(new Date(assignment.dueDate), 'MMM dd, yyyy')}
+                              </>
+                            ) : 'No deadline'}
+                          </span>
                         </div>
                       </div>
                       <CardTitle className="mt-2 text-lg">{assignment.title}</CardTitle>
@@ -252,8 +280,16 @@ export default function Assignments() {
                         </div>
                         <div className="flex items-center">
                           <Calendar className="h-4 w-4 mr-1 text-gray-500 dark:text-gray-400" />
-                          <span className="text-gray-500 dark:text-gray-400">
-                            {assignment.dueDate ? formatDate(new Date(assignment.dueDate)) : 'No deadline'}
+                          <span>
+                            {assignment.timeWindow?.endTime ? (
+                              <>
+                                {getDaysRemaining(new Date(assignment.timeWindow.endTime))}
+                              </>
+                            ) : assignment.dueDate ? (
+                              <>
+                                {getDaysRemaining(new Date(assignment.dueDate))}
+                              </>
+                            ) : 'No deadline'}
                           </span>
                         </div>
                       </div>
@@ -262,7 +298,7 @@ export default function Assignments() {
                     <CardFooter className="border-t bg-gray-50 dark:bg-dark-border pt-4">
                       <Button asChild className="w-full">
                         <Link href={`/student/assignments/${assignment._id}`}>
-                          Start Assignment <ChevronRight className="h-4 w-4 ml-1" />
+                          {assignment.status === 'in-progress' ? 'Continue Working' : 'Start Assignment'} <ChevronRight className="h-4 w-4 ml-1" />
                         </Link>
                       </Button>
                     </CardFooter>
@@ -273,67 +309,7 @@ export default function Assignments() {
               <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                 <ClipboardList className="h-12 w-12 mx-auto mb-4 opacity-20" />
                 <h3 className="text-lg font-medium">No pending assignments found</h3>
-                <p className="text-sm">All assignments have been started or completed</p>
-              </div>
-            )}
-          </TabsContent>
-          
-          <TabsContent value="in-progress" className="m-0">
-            {isLoading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            ) : inProgressAssignments.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {inProgressAssignments.map((assignment) => (
-                  <Card key={assignment._id} className="overflow-hidden border-l-4 border-l-primary">
-                    <CardHeader className="pb-2">
-                      <div className="flex justify-between items-start">
-                        <Badge className="bg-primary-light bg-opacity-10 text-primary">
-                          {getCourseName(assignment.courseId)}
-                        </Badge>
-                        <Badge variant="outline" className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800">
-                          In Progress
-                        </Badge>
-                      </div>
-                      <CardTitle className="mt-2 text-lg">{assignment.title}</CardTitle>
-                      <CardDescription className="line-clamp-2">
-                        {assignment.description || 'Continue working on this assignment.'}
-                      </CardDescription>
-                    </CardHeader>
-                    
-                    <CardContent>
-                      <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center">
-                          <ClipboardList className="h-4 w-4 mr-1 text-gray-500 dark:text-gray-400" />
-                          <span className="text-gray-500 dark:text-gray-400">
-                            {assignment.type || 'Coding Assignment'}
-                          </span>
-                        </div>
-                        <div className="flex items-center text-amber-600 dark:text-amber-400 font-medium">
-                          <Clock className="h-4 w-4 mr-1" />
-                          <span>
-                            {assignment.dueDate ? getDaysRemaining(new Date(assignment.dueDate)) : 'No deadline'}
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                    
-                    <CardFooter className="border-t bg-gray-50 dark:bg-dark-border pt-4">
-                      <Button asChild className="w-full">
-                        <Link href={`/student/assignments/${assignment._id}`}>
-                          Continue Working
-                        </Link>
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                <ClipboardList className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                <h3 className="text-lg font-medium">No assignments in progress</h3>
-                <p className="text-sm">Start working on assignments to see them here</p>
+                <p className="text-sm">All assignments have been completed</p>
               </div>
             )}
           </TabsContent>
@@ -406,9 +382,12 @@ export default function Assignments() {
                     
                     <CardFooter className="border-t bg-gray-50 dark:bg-dark-border pt-4">
                       <Button asChild size="sm">
-                        <Link href={`/student/assignments/${assignment._id}/results`}>
+                        <Link href={assignment.isCompleted
+                            ? `/student/assignments/${assignment._id}/results`
+                            : `/student/assignments/${assignment._id}`}>
                           View Submission
                         </Link>
+                        
                       </Button>
                     </CardFooter>
                   </Card>
@@ -459,7 +438,15 @@ export default function Assignments() {
                         <div className="flex items-center text-destructive font-medium">
                           <Calendar className="h-4 w-4 mr-1" />
                           <span>
-                            Due {assignment.dueDate ? formatDate(new Date(assignment.dueDate)) : 'N/A'}
+                            {assignment.timeWindow?.endTime ? (
+                              <>
+                                {getDaysRemaining(new Date(assignment.timeWindow.endTime))} 
+                              </>
+                            ) : assignment.dueDate ? (
+                              <>
+                                {getDaysRemaining(new Date(assignment.dueDate))} 
+                              </>
+                            ) : 'No deadline'}
                           </span>
                         </div>
                       </div>

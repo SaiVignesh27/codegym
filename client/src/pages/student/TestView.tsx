@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Loader2, ArrowLeft, Timer, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { apiRequest } from '@/lib/queryClient';
+import CodeEditor from '@/components/editor/CodeEditor';
 
 export default function TestView() {
   const { id } = useParams();
@@ -26,14 +27,14 @@ export default function TestView() {
   });
 
   // Fetch the student's result for this test
-  const { data: resultData, isLoading: isResultLoading } = useQuery({
+  const { data: resultData, isLoading: isResultLoading } = useQuery<{ result: Result }>({
     queryKey: [`/api/student/tests/${id}/results`],
     retry: false,
   });
 
   // If result exists, redirect to results page
   React.useEffect(() => {
-    if (resultData && resultData.result) {
+    if (resultData?.result) {
       setLocation(`/student/tests/${id}/results`);
     }
   }, [resultData, id, setLocation]);
@@ -75,25 +76,58 @@ export default function TestView() {
         const studentAnswer = answers[question._id || index.toString()];
         const correctAnswer = question.correctAnswer;
         
-        // Get the index of the selected option
-        const selectedOptionIndex = question.options?.findIndex(opt => opt === studentAnswer) ?? -1;
-        const correctAnswerIndex = parseInt(correctAnswer.toString());
-        
-        // Check if the answer is correct
-        const isCorrect = selectedOptionIndex === correctAnswerIndex;
-        const feedback = isCorrect 
-          ? 'Correct answer' 
-          : `Incorrect. Correct answer: ${question.options?.[correctAnswerIndex] || correctAnswer}`;
+        let isCorrect = false;
+        let feedback = '';
+        let processedAnswer = studentAnswer;
+
+        if (question.type === 'mcq') {
+          // For MCQ questions, compare option indices
+          const selectedOptionIndex = question.options?.findIndex(opt => opt === studentAnswer) ?? -1;
+          const correctAnswerIndex = parseInt(correctAnswer.toString());
+          isCorrect = selectedOptionIndex === correctAnswerIndex;
+          feedback = isCorrect 
+            ? 'Correct answer' 
+            : `Incorrect. Correct answer: ${question.options?.[correctAnswerIndex] || correctAnswer}`;
+        } else if (question.type === 'fill') {
+          // For fill-in-the-blanks, compare answers directly
+          const studentAnswerStr = typeof studentAnswer === 'string' ? studentAnswer : '';
+          const correctAnswerStr = typeof correctAnswer === 'string' ? correctAnswer : '';
+          isCorrect = studentAnswerStr.trim().toLowerCase() === correctAnswerStr.trim().toLowerCase();
+          feedback = isCorrect 
+            ? 'Correct answer' 
+            : `Incorrect. Correct answer: ${correctAnswer}`;
+        } else if (question.type === 'code') {
+          // For code questions, parse the stored answer and compare outputs
+          try {
+            const parsedAnswer = JSON.parse(studentAnswer);
+            const outputStr = typeof parsedAnswer.output === 'string' ? parsedAnswer.output : '';
+            const correctAnswerStr = typeof correctAnswer === 'string' ? correctAnswer : '';
+            processedAnswer = outputStr;
+            isCorrect = outputStr.trim() === correctAnswerStr.trim();
+            feedback = isCorrect 
+              ? 'Correct output' 
+              : `Incorrect output. Expected: ${correctAnswer}`;
+          } catch (e) {
+            // If parsing fails, fall back to comparing the raw answer
+            const studentAnswerStr = typeof studentAnswer === 'string' ? studentAnswer : '';
+            const correctAnswerStr = typeof correctAnswer === 'string' ? correctAnswer : '';
+            processedAnswer = studentAnswerStr;
+            isCorrect = studentAnswerStr.trim() === correctAnswerStr.trim();
+            feedback = isCorrect 
+              ? 'Correct output' 
+              : `Incorrect output. Expected: ${correctAnswer}`;
+          }
+        }
 
         const points = isCorrect ? (question.points || 1) : 0;
         
         return {
           questionId: question._id || index.toString(),
-          answer: studentAnswer,
+          answer: processedAnswer,
           isCorrect,
           points,
           feedback,
-          correctAnswer: question.options?.[correctAnswerIndex] || correctAnswer
+          correctAnswer: question.type === 'mcq' ? question.options?.[parseInt(correctAnswer.toString())] || correctAnswer : correctAnswer
         };
       });
 
@@ -146,6 +180,80 @@ export default function TestView() {
       setLocation(`/student/tests/${id}/results`);
     }
   }, [isTestSubmitted, id, setLocation]);
+
+  // Render question based on type
+  const renderQuestion = (question: any, index: number) => {
+    switch (question.type) {
+      case 'mcq':
+        return (
+          <RadioGroup
+            value={answers[question._id || index.toString()]}
+            onValueChange={(value) =>
+              setAnswers(prev => ({
+                ...prev,
+                [question._id || index.toString()]: value
+              }))
+            }
+          >
+            {question.options?.map((option: string, optIndex: number) => (
+              <div key={optIndex} className="flex items-center space-x-2">
+                <RadioGroupItem
+                  value={option}
+                  id={`q${index}-opt${optIndex}`}
+                />
+                <Label htmlFor={`q${index}-opt${optIndex}`}>{option}</Label>
+              </div>
+            ))}
+          </RadioGroup>
+        );
+      
+      case 'fill':
+        return (
+          // <textarea
+          //   className="w-full p-2 border rounded-md dark:bg-gray-800"
+          //   rows={4}
+          //   placeholder="Enter your answer here..."
+          //   value={answers[question._id || index.toString()] || ''}
+          //   onChange={(e) => setAnswers(prev => ({
+          //     ...prev,
+          //     [question._id || index.toString()]: e.target.value
+          //   }))}
+          // />
+          <textarea
+            className="w-full p-2 border rounded-md dark:bg-gray-800"
+            rows={4}
+            placeholder="Enter your answer here..."
+            value={answers[question._id || index.toString()] || ''}
+            onChange={(e) => setAnswers(prev => ({
+              ...prev,
+              [question._id || index.toString()]: e.target.value
+            }))}
+          />
+        );
+
+      case 'code':
+        return (
+          <CodeEditor
+            initialCode={question.codeTemplate || ''}
+            language="java" // Default to Java
+            readOnly={false}
+            question={question.text}
+            description={question.description}
+            onSubmit={(code, languageId, result) => {
+              // Store both the code and its output
+              const answer = {
+                code: code,
+                output: result.stdout || result.stderr || result.compile_output || 'No output'
+              };
+              setAnswers(prev => ({
+                ...prev,
+                [question._id || index.toString()]: JSON.stringify(answer)
+              }));
+            }}
+          />
+        );
+    }
+  };
 
   if (isLoading) {
     return (
@@ -212,25 +320,7 @@ export default function TestView() {
               </CardHeader>
               <CardContent>
                 <p className="mb-4">{question.text}</p>
-                <RadioGroup
-                  value={answers[question._id || index.toString()]}
-                  onValueChange={(value) =>
-                    setAnswers(prev => ({
-                      ...prev,
-                      [question._id || index.toString()]: value
-                    }))
-                  }
-                >
-                  {question.options?.map((option, optIndex) => (
-                    <div key={optIndex} className="flex items-center space-x-2">
-                      <RadioGroupItem
-                        value={option}
-                        id={`q${index}-opt${optIndex}`}
-                      />
-                      <Label htmlFor={`q${index}-opt${optIndex}`}>{option}</Label>
-                    </div>
-                  ))}
-                </RadioGroup>
+                {renderQuestion(question, index)}
               </CardContent>
             </Card>
           ))}

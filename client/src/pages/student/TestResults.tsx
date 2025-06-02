@@ -250,80 +250,66 @@ export default function TestResults() {
                 </CardHeader>
                 <CardContent>
                   <p className="mb-4">{question.text}</p>
-                  {question.options ? (
-                    <div className="space-y-4">
-                      {!isCorrect && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                            <div className="flex items-center gap-2 mb-2">
-                              <XCircle className="h-5 w-5 text-red-500" />
-                              <h4 className="font-medium">Your Answer</h4>
-                            </div>
-                            <p className="text-red-700 dark:text-red-300">{answer?.answer}</p>
-                          </div>
-                          <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-                            <div className="flex items-center gap-2 mb-2">
-                              <CheckCircle className="h-5 w-5 text-green-500" />
-                              <h4 className="font-medium">Correct Answer</h4>
-                            </div>
-                            <p className="text-green-700 dark:text-green-300">
-                              {question.options?.[parseInt(question.correctAnswer.toString())] || question.correctAnswer}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                      <div className="space-y-2">
-                        {question.options.map((option: string, optIndex: number) => {
-                          const isCorrectOption = option === question.correctAnswer;
-                          const isSelectedOption = option === answer?.answer;
-                          const showAsIncorrect = !isCorrect && isSelectedOption;
-                          const showAsCorrect = isCorrect && isSelectedOption;
-
-                          return (
-                            <div
-                              key={optIndex}
-                              className={`p-3 rounded-lg ${
-                                showAsCorrect
-                                  ? "bg-green-100 dark:bg-green-900 border border-green-200 dark:border-green-800"
-                                  : showAsIncorrect
-                                  ? "bg-red-100 dark:bg-red-900 border border-red-200 dark:border-red-800"
-                                  : "bg-gray-100 dark:bg-gray-800"
-                              }`}
+                  <div className="space-y-4">
+                    {question.type === 'mcq' && (
+                      <div>
+                        <p className="font-medium mb-2">Options:</p>
+                        <ul className="list-disc pl-5">
+                          {question.options?.map((option: string, optIndex: number) => (
+                            <li 
+                              key={optIndex} 
+                              className={
+                                option === answer?.answer ? 
+                                (isCorrect ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400 font-semibold') : 
+                                (question.correctAnswer === option ? 'text-green-600 dark:text-green-400 font-semibold' : '')
+                              }
                             >
-                              <div className="flex items-center justify-between">
-                                <span>{option}</span>
-                                {showAsCorrect && (
-                                  <div className="flex items-center text-green-600 dark:text-green-400">
-                                    <CheckCircle className="h-4 w-4 mr-1" />
-                                    <span className="text-sm">Correct Answer</span>
-                                  </div>
-                                )}
-                                {showAsIncorrect && (
-                                  <div className="flex items-center text-red-600 dark:text-red-400">
-                                    <XCircle className="h-4 w-4 mr-1" />
-                                    <span className="text-sm">Your Answer</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
+                              {option}
+                              {option === answer?.answer && (
+                                isCorrect ? ' (Your Answer - Correct)' : ' (Your Answer)'
+                              )}
+                              {question.correctAnswer === option && !isCorrect && (
+                                ' (Correct Answer)'
+                              )}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                        <p className="font-medium mb-2">Your Answer:</p>
-                        <p>{answer?.answer || "No answer provided"}</p>
-                      </div>
-                      {!isCorrect && (
+                    )}
+
+                    {question.type === 'fill' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className={`p-4 rounded-lg ${isCorrect ? 'bg-green-100 dark:bg-green-900' : 'bg-red-100 dark:bg-red-900'}`}>
+                          <p className="font-medium mb-2">Your Answer:</p>
+                          <p>{answer?.answer || "No answer provided"}</p>
+                        </div>
                         <div className="p-4 bg-green-100 dark:bg-green-900 rounded-lg">
                           <p className="font-medium mb-2">Correct Answer:</p>
                           <p>{question.correctAnswer}</p>
                         </div>
-                      )}
-                    </div>
-                  )}
+                      </div>
+                    )}
+
+                    {question.type === 'code' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className={`p-4 rounded-lg ${isCorrect ? 'bg-green-100 dark:bg-green-900' : 'bg-red-100 dark:bg-red-900'}`}>
+                          <p className="font-medium mb-2">Your Output:</p>
+                          <pre className="whitespace-pre-wrap text-sm font-mono">{answer?.answer || "No output"}</pre>
+                        </div>
+                        <div className="p-4 bg-green-100 dark:bg-green-900 rounded-lg">
+                          <p className="font-medium mb-2">Expected Output:</p>
+                          <pre className="whitespace-pre-wrap text-sm font-mono">{question.correctAnswer}</pre>
+                        </div>
+                      </div>
+                    )}
+
+                    {answer?.feedback && (
+                      <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                        <p className="font-medium mb-2">Feedback:</p>
+                        <p>{answer.feedback}</p>
+                      </div>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             );

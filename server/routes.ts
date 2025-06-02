@@ -4,6 +4,8 @@ import { storage } from "./storage";
 import { mongoStorage } from "./index";
 import bcrypt from "bcrypt";
 import { CircleUser } from "lucide-react";
+import { submitCode, getSubmissionResult, languageIds } from './judge0';
+import { Test, TestSubmission, Assignment, AssignmentSubmission } from './models.ts';
 
 // Add authentication middleware
 const authenticateUser = async (req: Request, res: Response, next: Function) => {
@@ -50,14 +52,37 @@ const authenticateUser = async (req: Request, res: Response, next: Function) => 
   }
 };
 
+// Helper function to validate answers based on question type
+const validateAnswer = (question: any, answer: any): boolean => {
+  switch (question.type) {
+    case 'mcq':
+      // For MCQ, check if the selected option matches the correct answer
+      return question.correctAnswer === answer;
+    
+    case 'fill':
+      // For fill in the blank, do a case-insensitive comparison
+      const studentAnswer = String(answer).toLowerCase().trim();
+      const correctAnswer = String(question.correctAnswer).toLowerCase().trim();
+      console.log('Fill-in-blank validation:', {
+        studentAnswer,
+        correctAnswer,
+        isEqual: studentAnswer === correctAnswer
+      });
+      return studentAnswer === correctAnswer;
+    
+    case 'code':
+      // For code questions, compare the output with the correct answer
+      return String(question.correctAnswer).toLowerCase().trim() === String(answer).toLowerCase().trim();
+    
+    default:
+      return false;
+  }
+};
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize MongoDB connection
-  try {
-    await mongoStorage.connect();
-    console.log('Connected to MongoDB successfully');
-  } catch (error) {
-    console.error('Failed to connect to MongoDB:', error);
-  }
+  await mongoStorage.connect();
+
   // Test API endpoint
   app.get('/api/test', (req, res) => {
     res.json({ message: 'API is working!' });
@@ -166,9 +191,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Student Dashboard Endpoints
-  app.get('/api/student/courses', async (req, res) => {
+  app.get('/api/student/courses', authenticateUser, async (req, res) => {
     try {
-      const courses = await mongoStorage.listCourses({ visibility: 'public' });
+      const user = (req as any).user;
+
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      // Get courses based on visibility and assignedTo
+      const courses = await mongoStorage.listCourses({ user });
       const classes = await mongoStorage.listClasses({ visibility: 'public' });
       const tests = await mongoStorage.listTests({ visibility: 'public' });
       const assignments = await mongoStorage.listAssignments({ visibility: 'public' });
@@ -199,34 +231,220 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/student/tests/upcoming', async (req, res) => {
+  app.get('/api/student/tests', authenticateUser, async (req, res) => {
     try {
-      const tests = await mongoStorage.listTests({ visibility: 'public' });
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
 
-      // Add additional information for display
-      const upcomingTests = tests.slice(0, 3).map(test => ({
-        ...test,
-        dueDate: new Date(Date.now() + Math.floor(Math.random() * 10) * 24 * 60 * 60 * 1000),
-        status: 'pending'
-      }));
+      const courseId = req.query.courseId as string | undefined;
+      const tests = await mongoStorage.listTests({ 
+        courseId,
+        user
+      });
+      const courses = await mongoStorage.listCourses({ user });
 
-      res.json(upcomingTests);
+      // Fetch student's test results
+      const results = await mongoStorage.listResults({ 
+        studentId: user._id,
+        type: 'test'
+      });
+
+      // Merge tests with results to determine status
+      const testsWithStatus = tests.map(test => {
+        const result = results.find(r => r.testId === test._id);
+        const course = courses.find(c => c._id === test.courseId);
+
+        return {
+          ...test,
+          status: result ? 'completed' : 'pending',
+          courseTitle: course?.title || 'Unknown Course'
+        };
+      });
+
+      res.json(testsWithStatus);
     } catch (error) {
-      console.error('Error fetching upcoming tests:', error);
+      console.error('Error fetching student tests:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
 
-  app.get('/api/student/assignments/pending', async (req, res) => {
+  app.get('/api/student/tests/pending', authenticateUser, async (req, res) => {
     try {
-      const assignments = await mongoStorage.listAssignments({ visibility: 'public' });
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      console.log('Fetching tests for user:', user._id);
+
+      // Get all tests for the user
+      const tests = await mongoStorage.listTests({ user });
+      console.log('Found tests:', tests.length);
+
+      // Get all test results for the user
+      const results = await mongoStorage.listResults({ 
+        studentId: user._id,
+        type: 'test'
+      });
+      console.log('Found results:', results.length);
+
+      // Get courses for course titles
+      const courses = await mongoStorage.listCourses({ user });
+      console.log('Found courses:', courses.length);
+
+      // Create a map of test IDs to their results for faster lookup
+      const testResultsMap = new Map(
+        results.map(result => [result.testId, result])
+      );
+
+      // Filter and map tests
+      const pendingTests = tests
+        .map(test => {
+          const result = testResultsMap.get(test._id);
+          const course = courses.find(c => c._id === test.courseId);
+          
+          return {
+            ...test,
+            courseTitle: course?.title || 'Unknown Course',
+            isCompleted: !!result,
+            status: result ? 'completed' : 'pending',
+            result: result || null
+          };
+        })
+        .filter(test => !test.isCompleted);
+
+      console.log('Returning pending tests:', pendingTests.length);
+      res.json(pendingTests);
+    } catch (error) {
+      console.error('Error in /api/student/tests/pending:', error);
+      res.status(500).json({ 
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  app.get('/api/student/tests/:id', authenticateUser, async (req, res) => {
+    try {
+      const testId = req.params.id;
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const test = await mongoStorage.getTest(testId, user);
+      if (!test) {
+        return res.status(404).json({ error: 'Test not found' });
+      }
+
+      // Check if user has access to the test's course
+      const course = await mongoStorage.getCourse(test.courseId, user);
+      if (!course) {
+        return res.status(403).json({ error: 'You do not have access to this test' });
+      }
+
+      res.json(test);
+    } catch (error) {
+      console.error('Error fetching student test:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.get('/api/student/assignments', authenticateUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const courseId = req.query.courseId as string | undefined;
+      const assignments = await mongoStorage.listAssignments({ 
+        courseId,
+        user
+      });
+
+      // Fetch student's assignment results
+      const results = await mongoStorage.listResults({ 
+        studentId: user._id,
+        type: 'assignment'
+      });
+
+      // Merge assignments with results to determine status
+      const assignmentsWithStatus = assignments.map(assignment => {
+        const result = results.find(r => r.assignmentId === assignment._id);
+        const dueDate = assignment.dueDate ? new Date(assignment.dueDate) : undefined;
+        const now = new Date();
+        const startTime = assignment.timeWindow?.startTime ? new Date(assignment.timeWindow.startTime) : undefined;
+        const endTime = assignment.timeWindow?.endTime ? new Date(assignment.timeWindow.endTime) : undefined;
+
+        let status: 'pending' | 'completed' | 'overdue' = 'pending';
+        
+        if (result) {
+          status = 'completed';
+        } else if (dueDate && dueDate < now) {
+          status = 'overdue';
+        } else if (startTime && endTime && now > endTime) {
+          status = 'overdue';
+        }
+
+        return {
+          ...assignment,
+          status,
+          dueDate
+        };
+      });
+
+      res.json(assignmentsWithStatus);
+    } catch (error) {
+      console.error('Error fetching student assignments:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.get('/api/student/assignments/pending', authenticateUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const assignments = await mongoStorage.listAssignments({ user });
+      const results = await mongoStorage.listResults({ 
+        studentId: user._id,
+        type: 'assignment'
+      });
 
       // Add due dates and status
-      const pendingAssignments = assignments.slice(0, 3).map(assignment => ({
-        ...assignment,
-        dueDate: new Date(Date.now() + Math.floor(Math.random() * 10) * 24 * 60 * 60 * 1000),
-        status: 'pending'
-      }));
+      const pendingAssignments = assignments
+        .filter(assignment => {
+          const result = results.find(r => r.assignmentId === assignment._id);
+          if (result) return false; // Skip completed assignments
+
+          const assignmentDueDate = assignment.dueDate ? new Date(assignment.dueDate) : undefined;
+          const startTime = assignment.timeWindow?.startTime ? new Date(assignment.timeWindow.startTime) : undefined;
+          const endTime = assignment.timeWindow?.endTime ? new Date(assignment.timeWindow.endTime) : undefined;
+          const now = new Date();
+
+          // Only include assignments that are pending
+          if (assignmentDueDate && assignmentDueDate < now) return false; // Skip overdue assignments
+          if (startTime && endTime && now > endTime) return false; // Skip assignments past their time window
+          return true; // Include all other assignments as pending
+        })
+        .slice(0, 3)
+        .map(assignment => {
+          const assignmentDueDate = assignment.dueDate ? new Date(assignment.dueDate) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+          const startTime = assignment.timeWindow?.startTime ? new Date(assignment.timeWindow.startTime) : undefined;
+          const endTime = assignment.timeWindow?.endTime ? new Date(assignment.timeWindow.endTime) : undefined;
+          const now = new Date();
+
+          return {
+            ...assignment,
+            dueDate: assignmentDueDate,
+            status: 'pending'
+          };
+        });
 
       res.json(pendingAssignments);
     } catch (error) {
@@ -241,11 +459,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const achievements = [
         {
           _id: '1',
-          title: 'Course Champion',
-          description: 'Completed JavaScript Fundamentals with 95% score',
-          date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-          icon: 'award',
-          type: 'course'
+          type: 'enrollment',
+          title: 'New Enrollment',
+          details: 'John Doe enrolled in JavaScript Basics',
+          timestamp: new Date(),
+          icon: 'user-plus',
+          color: 'blue'
         },
         {
           _id: '2',
@@ -322,14 +541,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch('/api/student/profile', authenticateUser, async (req, res) => {
     try {
-      const { name, email } = req.body;
+      const { name } = req.body;
       const user = (req as any).user;
 
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      const updatedUser = await mongoStorage.updateUser(user._id, { name, email });
+      // Only update the name, preserve the existing email
+      const updatedUser = await mongoStorage.updateUser(user._id, { 
+        name,
+        email: user.email // Preserve the existing email
+      });
+      
       if (!updatedUser) {
         return res.status(404).json({ error: 'Failed to update user' });
       }
@@ -521,9 +745,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin Course Management Endpoints
-  app.get('/api/admin/courses', async (req, res) => {
+  app.get('/api/admin/courses', authenticateUser, async (req, res) => {
     try {
-      const courses = await mongoStorage.listCourses();
+      const user = (req as any).user;
+      const courses = await mongoStorage.listCourses({ user });
       res.json(courses);
     } catch (error) {
       console.error('Error fetching courses:', error);
@@ -531,8 +756,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/admin/courses', async (req, res) => {
+  app.post('/api/admin/courses', authenticateUser, async (req, res) => {
     try {
+      // Only admins should be able to create courses
+      const user = (req as any).user;
+      if (!user || user.role !== 'admin') {
+          return res.status(403).json({ error: 'Access denied' });
+      }
       const courseData = req.body;
       const newCourse = await mongoStorage.createCourse(courseData);
       res.status(201).json(newCourse);
@@ -542,10 +772,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/courses/:id', async (req, res) => {
+  app.get('/api/admin/courses/:id', authenticateUser, async (req, res) => {
     try {
       const courseId = req.params.id;
-      const course = await mongoStorage.getCourse(courseId);
+      const user = (req as any).user;
+      const course = await mongoStorage.getCourse(courseId, user);
 
       if (!course) {
         return res.status(404).json({ error: 'Course not found' });
@@ -558,9 +789,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/admin/courses/:id', async (req, res) => {
+  app.patch('/api/admin/courses/:id', authenticateUser, async (req, res) => {
     try {
       const courseId = req.params.id;
+      const user = (req as any).user;
+      if (!user || user.role !== 'admin') {
+          return res.status(403).json({ error: 'Access denied' });
+      }
       const courseData = req.body;
 
       const updatedCourse = await mongoStorage.updateCourse(courseId, courseData);
@@ -576,9 +811,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/admin/courses/:id', async (req, res) => {
+  app.delete('/api/admin/courses/:id', authenticateUser, async (req, res) => {
     try {
       const courseId = req.params.id;
+      const user = (req as any).user;
+      if (!user || user.role !== 'admin') {
+          return res.status(403).json({ error: 'Access denied' });
+      }
       const result = await mongoStorage.deleteCourse(courseId);
 
       if (!result) {
@@ -593,8 +832,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin Class Management Endpoints
-  app.get('/api/admin/classes', async (req, res) => {
+  app.get('/api/admin/classes', authenticateUser, async (req, res) => {
     try {
+       const user = (req as any).user;
+       if (!user || user.role !== 'admin') {
+           return res.status(403).json({ error: 'Access denied' });
+       }
       const courseId = req.query.courseId as string | undefined;
       const classes = await mongoStorage.listClasses({ courseId });
       res.json(classes);
@@ -604,8 +847,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/admin/classes', async (req, res) => {
+  app.post('/api/admin/classes', authenticateUser, async (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || user.role !== 'admin') {
+          return res.status(403).json({ error: 'Access denied' });
+      }
       const classData = req.body;
       const newClass = await mongoStorage.createClass(classData);
       res.status(201).json(newClass);
@@ -615,8 +862,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/classes/:id', async (req, res) => {
+  app.get('/api/admin/classes/:id', authenticateUser, async (req, res) => {
     try {
+       const user = (req as any).user;
+       if (!user || user.role !== 'admin') {
+           return res.status(403).json({ error: 'Access denied' });
+       }
       const classId = req.params.id;
       const classData = await mongoStorage.getClass(classId);
 
@@ -631,9 +882,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/admin/classes/:id', async (req, res) => {
+  app.patch('/api/admin/classes/:id', authenticateUser, async (req, res) => {
     try {
       const classId = req.params.id;
+      const user = (req as any).user;
+      if (!user || user.role !== 'admin') {
+          return res.status(403).json({ error: 'Access denied' });
+      }
       const classData = req.body;
 
       const updatedClass = await mongoStorage.updateClass(classId, classData);
@@ -649,9 +904,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/admin/classes/:id', async (req, res) => {
+  app.delete('/api/admin/classes/:id', authenticateUser, async (req, res) => {
     try {
       const classId = req.params.id;
+      const user = (req as any).user;
+      if (!user || user.role !== 'admin') {
+          return res.status(403).json({ error: 'Access denied' });
+      }
       const result = await mongoStorage.deleteClass(classId);
 
       if (!result) {
@@ -666,12 +925,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin Test Management Endpoints
-  app.get('/api/admin/tests', async (req, res) => {
+  app.get('/api/admin/tests', authenticateUser, async (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || user.role !== 'admin') {
+          return res.status(403).json({ error: 'Access denied' });
+      }
       const courseId = req.query.courseId as string | undefined;
       const classId = req.query.classId as string | undefined;
 
-      const tests = await mongoStorage.listTests({ courseId, classId });
+      const tests = await mongoStorage.listTests({ courseId, classId, user });
       res.json(tests);
     } catch (error) {
       console.error('Error fetching tests:', error);
@@ -679,8 +942,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/admin/tests', async (req, res) => {
+  app.post('/api/admin/tests', authenticateUser, async (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || user.role !== 'admin') {
+          return res.status(403).json({ error: 'Access denied' });
+      }
       const testData = req.body;
       const newTest = await mongoStorage.createTest(testData);
       res.status(201).json(newTest);
@@ -690,10 +957,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/tests/:id', async (req, res) => {
+  app.get('/api/admin/tests/:id', authenticateUser, async (req, res) => {
     try {
       const testId = req.params.id;
-      const test = await mongoStorage.getTest(testId);
+      const user = (req as any).user;
+      const test = await mongoStorage.getTest(testId, user);
 
       if (!test) {
         return res.status(404).json({ error: 'Test not found' });
@@ -706,9 +974,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/admin/tests/:id', async (req, res) => {
+  app.patch('/api/admin/tests/:id', authenticateUser, async (req, res) => {
     try {
       const testId = req.params.id;
+      const user = (req as any).user;
+      if (!user || user.role !== 'admin') {
+          return res.status(403).json({ error: 'Access denied' });
+      }
       const testData = req.body;
 
       const updatedTest = await mongoStorage.updateTest(testId, testData);
@@ -724,9 +996,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/admin/tests/:id', async (req, res) => {
+  app.delete('/api/admin/tests/:id', authenticateUser, async (req, res) => {
     try {
       const testId = req.params.id;
+      const user = (req as any).user;
+      if (!user || user.role !== 'admin') {
+          return res.status(403).json({ error: 'Access denied' });
+      }
       const result = await mongoStorage.deleteTest(testId);
 
       if (!result) {
@@ -741,11 +1017,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin Assignment Management Endpoints
-  app.get('/api/admin/assignments', async (req, res) => {
+  app.get('/api/admin/assignments', authenticateUser, async (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || user.role !== 'admin') {
+          return res.status(403).json({ error: 'Access denied' });
+      }
       const courseId = req.query.courseId as string | undefined;
 
-      const assignments = await mongoStorage.listAssignments({ courseId });
+      const assignments = await mongoStorage.listAssignments({ courseId, user });
       res.json(assignments);
     } catch (error) {
       console.error('Error fetching assignments:', error);
@@ -753,8 +1033,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/admin/assignments', async (req, res) => {
+  app.post('/api/admin/assignments', authenticateUser, async (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user || user.role !== 'admin') {
+          return res.status(403).json({ error: 'Access denied' });
+      }
       const assignmentData = req.body;
       const newAssignment = await mongoStorage.createAssignment(assignmentData);
       res.status(201).json(newAssignment);
@@ -764,10 +1048,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/assignments/:id', async (req, res) => {
+  app.get('/api/admin/assignments/:id', authenticateUser, async (req, res) => {
     try {
       const assignmentId = req.params.id;
-      const assignment = await mongoStorage.getAssignment(assignmentId);
+      const user = (req as any).user;
+      const assignment = await mongoStorage.getAssignment(assignmentId, user);
 
       if (!assignment) {
         return res.status(404).json({ error: 'Assignment not found' });
@@ -780,9 +1065,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/admin/assignments/:id', async (req, res) => {
+  app.patch('/api/admin/assignments/:id', authenticateUser, async (req, res) => {
     try {
       const assignmentId = req.params.id;
+      const user = (req as any).user;
+      if (!user || user.role !== 'admin') {
+          return res.status(403).json({ error: 'Access denied' });
+      }
       const assignmentData = req.body;
 
       const updatedAssignment = await mongoStorage.updateAssignment(assignmentId, assignmentData);
@@ -798,9 +1087,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/admin/assignments/:id', async (req, res) => {
+  app.delete('/api/admin/assignments/:id', authenticateUser, async (req, res) => {
     try {
       const assignmentId = req.params.id;
+      const user = (req as any).user;
+      if (!user || user.role !== 'admin') {
+          return res.status(403).json({ error: 'Access denied' });
+      }
       const result = await mongoStorage.deleteAssignment(assignmentId);
 
       if (!result) {
@@ -815,8 +1108,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin Result Management Endpoints
-  app.get('/api/admin/results', async (req, res) => {
+  app.get('/api/admin/results', authenticateUser, async (req, res) => {
     try {
+      const user = (req as any).user; // Although not used for filtering here, keeping consistent
+      if (!user || user.role !== 'admin') {
+          return res.status(403).json({ error: 'Access denied' });
+      }
       const studentId = req.query.studentId as string | undefined;
       const courseId = req.query.courseId as string | undefined;
       const testId = req.query.testId as string | undefined;
@@ -836,8 +1133,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/admin/results', async (req, res) => {
+  app.post('/api/admin/results', authenticateUser, async (req, res) => {
     try {
+      const user = (req as any).user;
+       if (!user || user.role !== 'admin') {
+           return res.status(403).json({ error: 'Access denied' });
+       }
       const resultData = req.body;
       const newResult = await mongoStorage.createResult(resultData);
       res.status(201).json(newResult);
@@ -848,13 +1149,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Student Endpoints
-  app.get('/api/student/courses/:id', async (req, res) => {
+  app.get('/api/student/courses/:id', authenticateUser, async (req, res) => {
     try {
       const courseId = req.params.id;
-      const course = await mongoStorage.getCourse(courseId);
+      const user = (req as any).user;
+
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const course = await mongoStorage.getCourse(courseId, user);
 
       if (!course) {
         return res.status(404).json({ error: 'Course not found' });
+      }
+
+      // Check if user is assigned to the course
+      if (user.role === 'student' && !course.assignedTo?.includes(user._id)) {
+        return res.status(403).json({ error: 'You are not assigned to this course' });
       }
 
       res.json(course);
@@ -864,66 +1176,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/student/tests', async (req, res) => {
-    try {
-      const courseId = req.query.courseId as string | undefined;
-      const tests = await mongoStorage.listTests({ 
-        visibility: 'public',
-        courseId
-      });
-
-      // Add status information
-      const testsWithStatus = tests.map(test => ({
-        ...test,
-        status: Math.random() > 0.5 ? 'completed' : 'pending',
-        questions: test.questions ? test.questions.length : 0
-      }));
-
-      res.json(testsWithStatus);
-    } catch (error) {
-      console.error('Error fetching student tests:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  });
-
-  app.get('/api/student/tests/:id', async (req, res) => {
-    try {
-      const testId = req.params.id;
-      const test = await mongoStorage.getTest(testId);
-
-      if (!test) {
-        return res.status(404).json({ error: 'Test not found' });
-      }
-
-      if (test.visibility !== 'public') {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-
-      res.json(test);
-    } catch (error) {
-      console.error('Error fetching student test:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  });
-
   app.get('/api/student/assignments', authenticateUser, async (req, res) => {
     try {
-      const courseId = req.query.courseId as string | undefined;
       const user = (req as any).user;
-
       if (!user) {
-        return res.status(404).json({ error: 'User not found' });
+        return res.status(401).json({ error: 'Authentication required' });
       }
 
+      const courseId = req.query.courseId as string | undefined;
       const assignments = await mongoStorage.listAssignments({ 
-        visibility: 'public',
-        courseId
+        courseId,
+        user
       });
 
       // Fetch student's assignment results
       const results = await mongoStorage.listResults({ 
         studentId: user._id,
-        assignmentId: { $exists: true }
+        type: 'assignment'
       });
 
       // Merge assignments with results to determine status
@@ -931,14 +1200,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const result = results.find(r => r.assignmentId === assignment._id);
         const dueDate = assignment.dueDate ? new Date(assignment.dueDate) : undefined;
         const now = new Date();
+        const startTime = assignment.timeWindow?.startTime ? new Date(assignment.timeWindow.startTime) : undefined;
+        const endTime = assignment.timeWindow?.endTime ? new Date(assignment.timeWindow.endTime) : undefined;
 
-        let status: 'pending' | 'in-progress' | 'completed' | 'overdue' = 'pending';
+        let status: 'pending' | 'completed' | 'overdue' = 'pending';
+        
         if (result) {
           status = 'completed';
         } else if (dueDate && dueDate < now) {
           status = 'overdue';
-        } else if (assignment.status === 'in-progress') {
-          status = 'in-progress';
+        } else if (startTime && endTime && now > endTime) {
+          status = 'overdue';
         }
 
         return {
@@ -955,17 +1227,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/student/assignments/:id', async (req, res) => {
+  app.get('/api/student/assignments/:id', authenticateUser, async (req, res) => {
     try {
       const assignmentId = req.params.id;
-      const assignment = await mongoStorage.getAssignment(assignmentId);
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
 
+      const assignment = await mongoStorage.getAssignment(assignmentId, user);
       if (!assignment) {
         return res.status(404).json({ error: 'Assignment not found' });
       }
 
-      if (assignment.visibility !== 'public') {
-        return res.status(403).json({ error: 'Access denied' });
+      // Check if user has access to the assignment's course
+      const course = await mongoStorage.getCourse(assignment.courseId, user);
+      if (!course) {
+        return res.status(403).json({ error: 'You do not have access to this assignment' });
       }
 
       res.json(assignment);
@@ -975,32 +1253,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/student/classes', async (req, res) => {
+  app.get('/api/student/classes', authenticateUser, async (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
       const courseId = req.query.courseId as string | undefined;
+      
+      // First get the course to check access
+      if (courseId) {
+        const course = await mongoStorage.getCourse(courseId, user);
+        if (!course) {
+          return res.status(403).json({ error: 'You do not have access to this course' });
+        }
+      }
+
       const classes = await mongoStorage.listClasses({ 
-        visibility: 'public',
         courseId
       });
 
       res.json(classes);
     } catch (error) {
       console.error('Error fetching student classes:', error);
-      res.status(50).json({ error: 'Internal server error' });
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
-  app.get('/api/student/classes/:id', async (req, res) => {
+  app.get('/api/student/classes/:id', authenticateUser, async (req, res) => {
     try {
       const classId = req.params.id;
-      const classData = await mongoStorage.getClass(classId);
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
 
+      const classData = await mongoStorage.getClass(classId);
       if (!classData) {
         return res.status(404).json({ error: 'Class not found' });
       }
 
-      if (classData.visibility !== 'public') {
-        return res.status(403).json({ error: 'Access denied' });
+      // Check if user has access to the class's course
+      const course = await mongoStorage.getCourse(classData.courseId, user);
+      if (!course) {
+        return res.status(403).json({ error: 'You do not have access to this class' });
       }
 
       res.json(classData);
@@ -1014,15 +1311,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const user = (req as any).user;
       if (!user) {
-        return res.status(404).json({ error: 'User not found' });
+        return res.status(401).json({ error: 'Authentication required' });
       }
 
       const results = await mongoStorage.listResults({ 
-        studentId: user._id
+        studentId: user._id,
+        type: 'assignment'
       });
 
-      // If no results found, return empty array instead of 404
-      res.json(results || []);
+      // Filter results to only include items from courses the student has access to
+      const filteredResults = [];
+      for (const result of results) {
+        const course = await mongoStorage.getCourse(result.courseId, user);
+        if (course) {
+          filteredResults.push(result);
+        }
+      }
+
+      res.json(filteredResults);
     } catch (error) {
       console.error('Error fetching student results:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -1034,12 +1340,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const testId = req.params.id;
       const user = (req as any).user;
       if (!user) {
-        return res.status(404).json({ error: 'User not found' });
+        return res.status(401).json({ error: 'Authentication required' });
       }
 
-      const test = await mongoStorage.getTest(testId);
+      const test = await mongoStorage.getTest(testId, user);
       if (!test) {
         return res.status(404).json({ error: 'Test not found' });
+      }
+
+      // Check if user has access to the test's course
+      const course = await mongoStorage.getCourse(test.courseId, user);
+      if (!course) {
+        return res.status(403).json({ error: 'You do not have access to this test' });
       }
 
       const result = await mongoStorage.listResults({ 
@@ -1047,7 +1359,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         testId 
       }).then(results => results[0]);
 
-      // Return test data even if no result exists yet
       res.json({ 
         test,
         result: result || null
@@ -1063,17 +1374,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const assignmentId = req.params.id;
       const user = (req as any).user;
       if (!user) {
-        return res.status(404).json({ error: 'User not found' });
+        return res.status(401).json({ error: 'Authentication required' });
       }
 
-      const assignment = await mongoStorage.getAssignment(assignmentId);
+      const assignment = await mongoStorage.getAssignment(assignmentId, user);
       if (!assignment) {
         return res.status(404).json({ error: 'Assignment not found' });
       }
 
+      // Check if user has access to the assignment's course
+      const course = await mongoStorage.getCourse(assignment.courseId, user);
+      if (!course) {
+        return res.status(403).json({ error: 'You do not have access to this assignment' });
+      }
+
       const result = await mongoStorage.listResults({ 
         studentId: user._id,
-        assignmentId 
+        type: 'assignment'
       }).then(results => results[0]);
 
       if (!result) {
@@ -1097,8 +1414,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if a result already exists for this test/assignment
       const existingResult = await mongoStorage.listResults({
         studentId: user._id,
-        testId: req.body.testId,
-        assignmentId: req.body.assignmentId
+        type: 'assignment'
       }).then(results => results[0]);
 
       if (existingResult) {
@@ -1129,12 +1445,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/student/leaderboard', async (req, res) => {
     try {
       const courseId = req.query.courseId as string;
-      const type = req.query.type as string;
+      const type = req.query.type as 'test' | 'assignment';
       const timeRange = req.query.timeRange as string;
+      const itemId = req.query.itemId as string;
 
       // Get results with filters
       const results = await mongoStorage.listResults({
         courseId: courseId !== 'all' ? courseId : undefined,
+        testId: type === 'test' && itemId !== 'all' ? itemId : undefined,
+        assignmentId: type === 'assignment' && itemId !== 'all' ? itemId : undefined,
+        type
       });
 
       // Filter by time range
@@ -1164,35 +1484,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const student = await mongoStorage.getUser(result.studentId);
         if (!student) continue;
 
-        const entry = leaderboardMap.get(result.studentId) || {
+        const key = `${result.studentId}-${result.testId || result.assignmentId}`;
+        const entry = leaderboardMap.get(key) || {
           studentId: result.studentId,
           studentName: student.name,
           courseId: result.courseId,
           testId: result.testId,
           assignmentId: result.assignmentId,
-          totalTests: 0,
-          totalAssignments: 0,
-          score: 0,
+          score: result.score || 0, // Include 0 scores
           completedAt: result.submittedAt
         };
 
-        if (result.testId) entry.totalTests++;
-        if (result.assignmentId) entry.totalAssignments++;
-        
-        entry.score = Math.round((entry.score + (result.score || 0)) / 
-          (entry.totalTests + entry.totalAssignments));
-
+        // Update completedAt if this is a more recent submission
         if (result.submittedAt > entry.completedAt) {
           entry.completedAt = result.submittedAt;
         }
 
-        leaderboardMap.set(result.studentId, entry);
+        leaderboardMap.set(key, entry);
       }
 
-      // Convert to array and sort
-      const leaderboard = Array.from(leaderboardMap.values())
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 10);
+      // Convert to array and sort by score
+      const sortedLeaderboard = Array.from(leaderboardMap.values())
+        .sort((a, b) => b.score - a.score);
+
+      // Assign ranks with ties
+      const leaderboard: (typeof sortedLeaderboard[0] & { rank: number })[] = [];
+      let currentRank = 0;
+      let previousScore = -1;
+
+      for (let i = 0; i < sortedLeaderboard.length; i++) {
+        const entry = sortedLeaderboard[i];
+        if (entry.score !== previousScore) {
+          currentRank = i + 1;
+        }
+        leaderboard.push({ ...entry, rank: currentRank });
+        previousScore = entry.score;
+      }
 
       res.json(leaderboard);
     } catch (error) {
@@ -1216,40 +1543,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         visibility: 'public',
         createdBy: user._id 
       });
+
+      // Get all tests and assignments for the courses
+      const allTests = await mongoStorage.listTests({ user });
+      const allAssignments = await mongoStorage.listAssignments({ user });
       
-      // Calculate overall progress
+      // Calculate completed tests and assignments
+      const completedTests = courseProgress.reduce((acc, cp) => 
+        acc + cp.completedItems.filter(item => item.itemType === 'test').length, 0);
+      const completedAssignments = courseProgress.reduce((acc, cp) => 
+        acc + cp.completedItems.filter(item => item.itemType === 'assignment').length, 0);
+      
+      // Calculate total tests and assignments
+      const totalTests = allTests.length;
+      const totalAssignments = allAssignments.length;
+      
+      // Calculate overall progress based on completed items
+      const totalItems = totalTests + totalAssignments;
+      const completedItems = completedTests + completedAssignments;
+      const overallProgress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+      
+      // Calculate progress
       const progress = {
-        overall: courseProgress.length > 0 
-          ? Math.round(courseProgress.reduce((acc, cp) => acc + (cp.completedItems.length / cp.totalItems), 0) / courseProgress.length * 100)
-          : 0,
+        overall: overallProgress,
         courses: {
           completed: courseProgress.filter(cp => cp.completedItems.length === cp.totalItems).length,
           inProgress: courseProgress.filter(cp => cp.completedItems.length > 0 && cp.completedItems.length < cp.totalItems).length,
           total: courses.length
         },
         tests: {
-          completed: courseProgress.reduce((acc, cp) => acc + cp.completedItems.filter((item: any) => item.itemType === 'test').length, 0),
-          pending: courses.reduce((acc, course) => acc + (course.tests?.length || 0), 0) - 
-            courseProgress.reduce((acc, cp) => acc + cp.completedItems.filter((item: any) => item.itemType === 'test').length, 0),
+          completed: completedTests,
+          pending: totalTests - completedTests,
           average: courseProgress.length > 0
             ? Math.round(courseProgress.reduce((acc, cp) => {
                 const testScores = cp.completedItems
-                  .filter((item: any) => item.itemType === 'test' && item.score !== undefined)
-                  .map((item: any) => item.score!);
-                return acc + (testScores.reduce((sum: number, score: number) => sum + score, 0) / testScores.length);
+                  .filter(item => item.itemType === 'test' && item.score !== undefined)
+                  .map(item => item.score!);
+                return acc + (testScores.reduce((sum, score) => sum + score, 0) / testScores.length);
               }, 0) / courseProgress.length)
             : 0
         },
         assignments: {
-          completed: courseProgress.reduce((acc, cp) => acc + cp.completedItems.filter((item: any) => item.itemType === 'assignment').length, 0),
-          pending: courses.reduce((acc, course) => acc + (course.assignments?.length || 0), 0) - 
-            courseProgress.reduce((acc, cp) => acc + cp.completedItems.filter((item: any) => item.itemType === 'assignment').length, 0),
+          completed: completedAssignments,
+          pending: totalAssignments - completedAssignments,
           average: courseProgress.length > 0
             ? Math.round(courseProgress.reduce((acc, cp) => {
                 const assignmentScores = cp.completedItems
-                  .filter((item: any) => item.itemType === 'assignment' && item.score !== undefined)
-                  .map((item: any) => item.score!);
-                return acc + (assignmentScores.reduce((sum: number, score: number) => sum + score, 0) / assignmentScores.length);
+                  .filter(item => item.itemType === 'assignment' && item.score !== undefined)
+                  .map(item => item.score!);
+                return acc + (assignmentScores.reduce((sum, score) => sum + score, 0) / assignmentScores.length);
               }, 0) / courseProgress.length)
             : 0
         }
@@ -1423,15 +1765,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const user = (req as any).user;
       if (!user) {
-        return res.status(404).json({ error: 'User not found' });
+        return res.status(401).json({ error: 'Authentication required' });
       }
 
       // Get all test results for this student
       const results = await mongoStorage.listResults({ 
         studentId: user._id,
-        testId: { $exists: true }
+        type: 'test'
       });
-      res.json(results);
+
+      // Filter results to only include items from courses the student has access to
+      const filteredResults = [];
+      for (const result of results) {
+        const course = await mongoStorage.getCourse(result.courseId, user);
+        if (course) {
+          filteredResults.push(result);
+        }
+      }
+
+      res.json(filteredResults);
     } catch (error) {
       console.error('Error fetching student test results:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -1442,18 +1794,515 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const user = (req as any).user;
       if (!user) {
-        return res.status(404).json({ error: 'User not found' });
+        return res.status(401).json({ error: 'Authentication required' });
       }
 
       // Get all assignment results for this student
       const results = await mongoStorage.listResults({ 
         studentId: user._id,
-        assignmentId: { $exists: true }
+        type: 'assignment'
       });
-      res.json(results);
+
+      // Filter results to only include items from courses the student has access to
+      const filteredResults = [];
+      for (const result of results) {
+        const course = await mongoStorage.getCourse(result.courseId, user);
+        if (course) {
+          filteredResults.push(result);
+        }
+      }
+
+      res.json(filteredResults);
     } catch (error) {
       console.error('Error fetching student assignment results:', error);
       res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.get('/api/admin/leaderboard', async (req, res) => {
+    try {
+      const courseId = req.query.courseId as string;
+      const type = req.query.type as 'test' | 'assignment';
+      const timeRange = req.query.timeRange as string;
+      const itemId = req.query.itemId as string;
+
+      // Get results with filters
+      const results = await mongoStorage.listResults({
+        courseId: courseId !== 'all' ? courseId : undefined,
+        testId: type === 'test' && itemId !== 'all' ? itemId : undefined,
+        assignmentId: type === 'assignment' && itemId !== 'all' ? itemId : undefined,
+        type
+      });
+
+      // Filter by time range
+      const now = new Date();
+      const filteredResults = results.filter(result => {
+        const submittedAt = new Date(result.submittedAt);
+        switch (timeRange) {
+          case 'week':
+            return (now.getTime() - submittedAt.getTime()) <= 7 * 24 * 60 * 60 * 1000;
+          case 'month':
+            return (now.getTime() - submittedAt.getTime()) <= 30 * 24 * 60 * 60 * 1000;
+          case 'year':
+            return (now.getTime() - submittedAt.getTime()) <= 365 * 24 * 60 * 60 * 1000;
+          default:
+            return true;
+        }
+      }).filter(result => {
+        if (type === 'test') return result.testId;
+        if (type === 'assignment') return result.assignmentId;
+        return true;
+      });
+
+      // Group by student and calculate scores
+      const leaderboardMap = new Map();
+
+      for (const result of filteredResults) {
+        const student = await mongoStorage.getUser(result.studentId);
+        if (!student) continue;
+
+        const key = `${result.studentId}-${result.testId || result.assignmentId}`;
+        const entry = leaderboardMap.get(key) || {
+          studentId: result.studentId,
+          studentName: student.name,
+          courseId: result.courseId,
+          testId: result.testId,
+          assignmentId: result.assignmentId,
+          score: result.score || 0, // Include 0 scores
+          completedAt: result.submittedAt
+        };
+
+        // Update completedAt if this is a more recent submission
+        if (result.submittedAt > entry.completedAt) {
+          entry.completedAt = result.submittedAt;
+        }
+
+        leaderboardMap.set(key, entry);
+      }
+
+      // Convert to array and sort by score
+      const sortedLeaderboard = Array.from(leaderboardMap.values())
+        .sort((a, b) => b.score - a.score);
+
+      // Assign ranks with ties
+      const leaderboard: (typeof sortedLeaderboard[0] & { rank: number })[] = [];
+      let currentRank = 0;
+      let previousScore = -1;
+
+      for (let i = 0; i < sortedLeaderboard.length; i++) {
+        const entry = sortedLeaderboard[i];
+        if (entry.score !== previousScore) {
+          currentRank = i + 1;
+        }
+        leaderboard.push({ ...entry, rank: currentRank });
+        previousScore = entry.score;
+      }
+
+      res.json(leaderboard);
+    } catch (error) {
+      console.error('Error fetching leaderboard:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.get('/api/student/tests/upcoming', authenticateUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const tests = await mongoStorage.listTests({ user });
+
+      // Add additional information for display
+      const upcomingTests = tests
+        .filter(test => {
+          // Only include tests that haven't been completed
+          const dueDate = (test as any).dueDate ? new Date((test as any).dueDate) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+          return dueDate > new Date();
+        })
+        .slice(0, 3)
+        .map(test => ({
+          ...test,
+          dueDate: (test as any).dueDate || new Date(Date.now() + Math.floor(Math.random() * 10) * 24 * 60 * 60 * 1000),
+          status: 'pending'
+        }));
+
+      res.json(upcomingTests);
+    } catch (error) {
+      console.error('Error fetching upcoming tests:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.get('/api/student/assignments/pending', authenticateUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const assignments = await mongoStorage.listAssignments({ user });
+      const results = await mongoStorage.listResults({ 
+        studentId: user._id,
+        type: 'assignment'
+      });
+
+      // Add due dates and status
+      const pendingAssignments = assignments
+        .filter(assignment => {
+          const result = results.find(r => r.assignmentId === assignment._id);
+          if (result) return false; // Skip completed assignments
+
+          const assignmentDueDate = assignment.dueDate ? new Date(assignment.dueDate) : undefined;
+          const startTime = assignment.timeWindow?.startTime ? new Date(assignment.timeWindow.startTime) : undefined;
+          const endTime = assignment.timeWindow?.endTime ? new Date(assignment.timeWindow.endTime) : undefined;
+          const now = new Date();
+
+          // Only include assignments that are pending
+          if (assignmentDueDate && assignmentDueDate < now) return false; // Skip overdue assignments
+          if (startTime && endTime && now > endTime) return false; // Skip assignments past their time window
+          return true; // Include all other assignments as pending
+        })
+        .slice(0, 3)
+        .map(assignment => {
+          const assignmentDueDate = assignment.dueDate ? new Date(assignment.dueDate) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+          const startTime = assignment.timeWindow?.startTime ? new Date(assignment.timeWindow.startTime) : undefined;
+          const endTime = assignment.timeWindow?.endTime ? new Date(assignment.timeWindow.endTime) : undefined;
+          const now = new Date();
+
+          return {
+            ...assignment,
+            dueDate: assignmentDueDate,
+            status: 'pending'
+          };
+        });
+
+      res.json(pendingAssignments);
+    } catch (error) {
+      console.error('Error fetching pending assignments:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.get('/api/student/tests/pending', authenticateUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      console.log('Fetching tests for user:', user._id);
+
+      // Get all tests for the user
+      const tests = await mongoStorage.listTests({ user });
+      console.log('Found tests:', tests.length);
+
+      // Get all test results for the user
+      const results = await mongoStorage.listResults({ 
+        studentId: user._id,
+        type: 'test'
+      });
+      console.log('Found results:', results.length);
+
+      // Get courses for course titles
+      const courses = await mongoStorage.listCourses({ user });
+      console.log('Found courses:', courses.length);
+
+      // Create a map of test IDs to their results for faster lookup
+      const testResultsMap = new Map(
+        results.map(result => [result.testId, result])
+      );
+
+      // Filter and map tests
+      const pendingTests = tests
+        .map(test => {
+          const result = testResultsMap.get(test._id);
+          const course = courses.find(c => c._id === test.courseId);
+          
+          return {
+            ...test,
+            courseTitle: course?.title || 'Unknown Course',
+            isCompleted: !!result,
+            status: result ? 'completed' : 'pending',
+            result: result || null
+          };
+        })
+        .filter(test => !test.isCompleted);
+
+      console.log('Returning pending tests:', pendingTests.length);
+      res.json(pendingTests);
+    } catch (error) {
+      console.error('Error in /api/student/tests/pending:', error);
+      res.status(500).json({ 
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Code execution routes
+  app.post('/api/compile/test', async (req, res) => {
+    try {
+      const { sourceCode, languageId, testCases, questionId } = req.body;
+  
+      if (!sourceCode || !languageId) {
+        return res.status(400).json({ error: 'Source code and language ID are required' });
+      }
+  
+      // No need to encode to base64 since local server is configured with base64_encoded=false
+      const input = testCases?.[0]?.input || '';
+  
+      // Submit code to local Judge0 server
+      const response = await fetch('http://localhost:3000/submissions/?base64_encoded=false&wait=true', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          source_code: sourceCode,
+          language_id: languageId,
+          stdin: input
+        })
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Judge0 submission error:', errorData);
+        throw new Error(`Failed to submit code to Judge0: ${response.statusText}`);
+      }
+  
+      const submissionResult = await response.json();
+  
+      // Process test results
+      const testResults = testCases?.map((testCase: { expectedOutput: string; input: string }) => {
+        const passed = (submissionResult.stdout || '').trim() === (testCase.expectedOutput || '').trim();
+        return {
+          passed,
+          input: testCase.input,
+          expectedOutput: testCase.expectedOutput,
+          actualOutput: submissionResult.stdout,
+          executionTime: submissionResult.time || 0,
+          error: submissionResult.stderr || submissionResult.compile_output
+        };
+      }) || [];
+  
+      const score = testResults.length > 0
+        ? (testResults.filter((t: { passed: boolean }) => t.passed).length / testResults.length) * 100
+        : 0;
+  
+      res.json({
+        output: submissionResult.stdout || submissionResult.stderr || submissionResult.compile_output,
+        testResults,
+        score,
+        executionTime: submissionResult.time,
+        status: submissionResult.status
+      });
+    } catch (error) {
+      console.error('Error executing code:', error);
+      res.status(500).json({
+        error: 'Failed to execute code',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Update the test submission endpoint
+  app.post('/api/tests/:testId/submit', authenticateUser, async (req: Request, res: Response) => {
+    try {
+      const { testId } = req.params;
+      const { answers } = req.body;
+      const userId = (req as any).user._id;
+
+      const test = await Test.findById(testId);
+      if (!test) {
+        return res.status(404).json({ error: 'Test not found' });
+      }
+
+      // Process answers and execute code if needed
+      const processedAnswers = await Promise.all(answers.map(async (answer: any, index: number) => {
+        const question = test.questions[index];
+        
+        // For code questions
+        if (question.type === 'code') {
+          const answerValue = typeof answer === 'string' ? JSON.parse(answer) : answer;
+          const { code, output } = answerValue;
+          
+          // Compare output with expected output
+          const isCorrect = output.trim() === question.correctAnswer.trim();
+          
+          return {
+            questionId: index.toString(),
+            answer: answerValue,
+            isCorrect,
+            points: isCorrect ? question.points : 0,
+            feedback: isCorrect 
+              ? "Correct answer" 
+              : `Incorrect. Expected output: ${question.correctAnswer}`,
+            correctAnswer: question.correctAnswer
+          };
+        }
+        
+        // For non-code questions
+        const answerValue = answer.answer || answer;
+        let isCorrect = false;
+
+        if (question.type === 'fill') {
+          // For fill-in-blank, do case-insensitive comparison and trim whitespace
+          const studentAnswer = String(answerValue).toLowerCase().trim();
+          const correctAnswer = String(question.correctAnswer).toLowerCase().trim();
+          isCorrect = studentAnswer === correctAnswer;
+          
+          console.log('Fill-in-blank submission:', {
+            studentAnswer,
+            correctAnswer,
+            isCorrect,
+            rawStudentAnswer: answerValue,
+            rawCorrectAnswer: question.correctAnswer
+          });
+        } else if (question.type === 'mcq') {
+          // For MCQ, do exact comparison
+          isCorrect = question.correctAnswer === answerValue;
+        }
+
+        return {
+          questionId: index.toString(),
+          answer: answerValue,
+          isCorrect,
+          points: isCorrect ? question.points : 0,
+          feedback: isCorrect 
+            ? "Correct answer" 
+            : `Incorrect. Correct answer: ${question.correctAnswer}`,
+          correctAnswer: question.correctAnswer
+        };
+      }));
+
+      // Calculate total score
+      const totalScore = processedAnswers.reduce((sum, answer) => sum + answer.points, 0);
+
+      // Save submission
+      const submission = new TestSubmission({
+        testId,
+        userId,
+        answers: processedAnswers,
+        score: totalScore,
+        maxScore: test.questions.reduce((sum: number, q: any) => sum + q.points, 0),
+        results: processedAnswers.map(answer => ({
+          questionId: answer.questionId,
+          questionText: test.questions[parseInt(answer.questionId)].text,
+          correctAnswer: answer.correctAnswer,
+          userAnswer: answer.answer,
+          isCorrect: answer.isCorrect,
+          points: answer.points
+        }))
+      });
+      await submission.save();
+
+      res.json({
+        submission,
+        results: processedAnswers,
+        score: totalScore,
+        maxScore: test.questions.reduce((sum: number, q: any) => sum + q.points, 0)
+      });
+    } catch (error) {
+      console.error('Error submitting test:', error);
+      res.status(500).json({ error: 'Failed to submit test' });
+    }
+  });
+
+  // Update the assignment submission endpoint
+  app.post('/api/assignments/:assignmentId/submit', authenticateUser, async (req: Request, res: Response) => {
+    try {
+      const { assignmentId } = req.params;
+      const { answers } = req.body;
+      const userId = (req as any).user._id;
+
+      const assignment = await Assignment.findById(assignmentId);
+      if (!assignment) {
+        return res.status(404).json({ error: 'Assignment not found' });
+      }
+
+      // Process answers and execute code if needed
+      const processedAnswers = await Promise.all(answers.map(async (answer: any, index: number) => {
+        const question = assignment.questions[index];
+        
+        // For code questions
+        if (question.type === 'code') {
+          const answerValue = typeof answer === 'string' ? JSON.parse(answer) : answer;
+          // Store only the output value
+          const output = answerValue.output;
+          
+          // Compare output with expected output
+          const isCorrect = output.trim() === question.correctAnswer.trim();
+          
+          return {
+            questionId: index.toString(),
+            answer: output, // Store only the output value
+            isCorrect,
+            points: isCorrect ? question.points : 0,
+            feedback: isCorrect 
+              ? "Correct answer" 
+              : `Incorrect. Expected output: ${question.correctAnswer}`,
+            correctAnswer: question.correctAnswer
+          };
+        }
+        
+        // For non-code questions
+        const answerValue = answer.answer || answer;
+        let isCorrect = false;
+
+        if (question.type === 'fill') {
+          // For fill-in-blank, do case-insensitive comparison and trim whitespace
+          const studentAnswer = String(answerValue).toLowerCase().trim();
+          const correctAnswer = String(question.correctAnswer).toLowerCase().trim();
+          isCorrect = studentAnswer === correctAnswer;
+        } else if (question.type === 'mcq') {
+          // For MCQ, do exact comparison
+          isCorrect = question.correctAnswer === answerValue;
+        }
+
+        return {
+          questionId: index.toString(),
+          answer: answerValue,
+          isCorrect,
+          points: isCorrect ? question.points : 0,
+          feedback: isCorrect 
+            ? "Correct answer" 
+            : `Incorrect. Correct answer: ${question.correctAnswer}`,
+          correctAnswer: question.correctAnswer
+        };
+      }));
+
+      // Calculate total score
+      const totalScore = processedAnswers.reduce((sum, answer) => sum + answer.points, 0);
+
+      // Save submission
+      const submission = new AssignmentSubmission({
+        assignmentId,
+        userId,
+        answers: processedAnswers,
+        score: totalScore,
+        maxScore: assignment.questions.reduce((sum: number, q: any) => sum + q.points, 0),
+        results: processedAnswers.map(answer => ({
+          questionId: answer.questionId,
+          questionText: assignment.questions[parseInt(answer.questionId)].text,
+          correctAnswer: answer.correctAnswer,
+          userAnswer: answer.answer,
+          isCorrect: answer.isCorrect,
+          points: answer.points
+        }))
+      });
+      await submission.save();
+
+      res.json({
+        submission,
+        results: processedAnswers,
+        score: totalScore,
+        maxScore: assignment.questions.reduce((sum: number, q: any) => sum + q.points, 0)
+      });
+    } catch (error) {
+      console.error('Error submitting assignment:', error);
+      res.status(500).json({ error: 'Failed to submit assignment' });
     }
   });
 

@@ -225,7 +225,7 @@ export default function Users() {
                           <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
                             user.role === 'admin' 
                               ? 'bg-primary-light bg-opacity-10 text-primary' 
-                              : 'bg-secondary bg-opacity-10 text-secondary'
+                              : 'bg-primary-light bg-opacity-10 text-secondary'
                           }`}>
                             {user.role === 'admin' ? 'Admin' : 'Student'}
                           </span>

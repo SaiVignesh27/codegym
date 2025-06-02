@@ -92,12 +92,10 @@ const questionSchema = z.object({
   options: z.array(z.string()).optional(),
   correctAnswer: z.union([z.string(), z.array(z.string())]),
   codeTemplate: z.string().optional(),
-  testCases: z.array(
-    z.object({
-      input: z.string(),
-      output: z.string(),
-    })
-  ).optional(),
+  testCase: z.object({
+    input: z.string(),
+    output: z.string(),
+  }).optional(),
   points: z.number().default(1),
 });
 
@@ -181,8 +179,8 @@ export default function Assignments() {
         visibility: selectedAssignment.visibility,
         assignedTo: selectedAssignment.assignedTo || [],
         timeWindow: {
-          startTime: new Date(selectedAssignment.timeWindow.startTime),
-          endTime: new Date(selectedAssignment.timeWindow.endTime),
+          startTime: new Date(selectedAssignment.timeWindow?.startTime || Date.now()),
+          endTime: new Date(selectedAssignment.timeWindow?.endTime || Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
         allowFileUpload: selectedAssignment.allowFileUpload || false,
       });
@@ -331,8 +329,8 @@ export default function Assignments() {
   // Check if assignment is active
   const isAssignmentActive = (assignment: Assignment) => {
     const now = new Date();
-    const startTime = new Date(assignment.timeWindow.startTime);
-    const endTime = new Date(assignment.timeWindow.endTime);
+    const startTime = new Date(assignment.timeWindow?.startTime || Date.now());
+    const endTime = new Date(assignment.timeWindow?.endTime || Date.now() + 7 * 24 * 60 * 60 * 1000);
     return now >= startTime && now <= endTime;
   };
 
@@ -469,71 +467,55 @@ export default function Assignments() {
             />
 
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label>Test Cases</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const testCases = form.getValues(`questions.${index}.testCases`) || [];
-                    form.setValue(`questions.${index}.testCases`, [
-                      ...testCases,
-                      { input: '', output: '' }
-                    ]);
-                  }}
-                >
-                  <Plus className="h-4 w-4 mr-1" /> Add Test Case
-                </Button>
+              <div>
+                <Label>Test Case</Label>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Provide input and expected output for the code question
+                </p>
               </div>
 
-              {(form.getValues(`questions.${index}.testCases`) || []).map((_, testIndex) => (
-                <div key={testIndex} className="grid grid-cols-2 gap-4 p-3 border rounded-md relative">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute top-0 right-0 h-8 w-8 p-0"
-                    onClick={() => {
-                      const testCases = form.getValues(`questions.${index}.testCases`) || [];
-                      form.setValue(
-                        `questions.${index}.testCases`,
-                        testCases.filter((_, i) => i !== testIndex)
-                      );
-                    }}
-                  >
-                    <Minus className="h-4 w-4" />
-                  </Button>
+              <div className="grid grid-cols-2 gap-4 p-3 border rounded-md">
+                <FormField
+                  control={form.control}
+                  name={`questions.${index}.testCase.input`}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Input</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          className="font-mono"
+                          placeholder="Enter test input"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                  <FormField
-                    control={form.control}
-                    name={`questions.${index}.testCases.${testIndex}.input`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Input</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name={`questions.${index}.testCases.${testIndex}.output`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Expected Output</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              ))}
+                <FormField
+                  control={form.control}
+                  name={`questions.${index}.testCase.output`}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Expected Output</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          className="font-mono"
+                          placeholder="Enter expected output"
+                          {...field}
+                          onChange={(e) => {
+                            field.onChange(e);
+                            // Update correctAnswer with the output value
+                            form.setValue(`questions.${index}.correctAnswer`, e.target.value);
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </div>
           </>
         );
@@ -588,19 +570,19 @@ export default function Assignments() {
                           <TableCell className="font-medium">{assignment.title}</TableCell>
                           <TableCell>{getCourseName(assignment.courseId)}</TableCell>
                           <TableCell>{assignment.questions.length}</TableCell>
-                          <TableCell>{formatDate(new Date(assignment.timeWindow.startTime))}</TableCell>
-                          <TableCell>{formatDate(new Date(assignment.timeWindow.endTime))}</TableCell>
+                          <TableCell>{formatDate(new Date(assignment.timeWindow?.startTime || Date.now()))}</TableCell>
+                          <TableCell>{formatDate(new Date(assignment.timeWindow?.endTime || Date.now() + 7 * 24 * 60 * 60 * 1000))}</TableCell>
                           <TableCell>
                             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
                               isActive 
                                 ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-300' 
-                                : new Date() < new Date(assignment.timeWindow.startTime)
+                                : new Date() < new Date(assignment.timeWindow?.startTime || Date.now())
                                   ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-300'
                                   : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-300'
                             }`}>
                               {isActive 
                                 ? 'Active' 
-                                : new Date() < new Date(assignment.timeWindow.startTime)
+                                : new Date() < new Date(assignment.timeWindow?.startTime || Date.now())
                                   ? 'Upcoming'
                                   : 'Expired'}
                             </span>
@@ -832,7 +814,7 @@ export default function Assignments() {
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="public">Public (all students)</SelectItem>
-                            <SelectItem value="private">Private (selected students only)</SelectItem>
+                            <SelectItem value="private">Private (Admins only)</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -840,7 +822,7 @@ export default function Assignments() {
                     )}
                   />
 
-                  {form.watch('visibility') === 'private' && (
+                  {/* {form.watch('visibility') === 'private' && (
                     <div>
                       <Label>Assign to Students</Label>
                       <div className="mt-2 border rounded-md p-4 max-h-60 overflow-y-auto">
@@ -878,7 +860,7 @@ export default function Assignments() {
                         )}
                       </div>
                     </div>
-                  )}
+                  )} */}
                 </TabsContent>
 
                 <TabsContent value="questions" className="space-y-6 pt-4">
@@ -941,12 +923,13 @@ export default function Assignments() {
                                         // Reset question fields based on type
                                         if (value === 'mcq') {
                                           form.setValue(`questions.${index}.options`, ['', '', '', '']);
-                                          form.setValue(`questions.${index}.correctAnswer`, '0');
+                                          form.setValue(`questions.${index}.correctAnswer`, '');
                                         } else if (value === 'fill') {
                                           form.setValue(`questions.${index}.correctAnswer`, '');
                                         } else if (value === 'code') {
                                           form.setValue(`questions.${index}.codeTemplate`, '');
-                                          form.setValue(`questions.${index}.testCases`, [{ input: '', output: '' }]);
+                                          form.setValue(`questions.${index}.testCase`, { input: '', output: '' });
+                                          form.setValue(`questions.${index}.correctAnswer`, '');
                                         }
                                       }} 
                                       defaultValue={field.value}
@@ -973,8 +956,7 @@ export default function Assignments() {
                                         <SelectItem value="code">
                                           <div className="flex items-center">
                                             <Code className="h-4 w-4 mr-2" />
-                                            ```python
-<span>Coding Question</span>
+                                            <span>Coding Question</span>
                                           </div>
                                         </SelectItem>
                                       </SelectContent>

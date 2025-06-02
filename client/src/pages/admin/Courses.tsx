@@ -52,7 +52,7 @@ const courseFormSchema = z.object({
   description: z.string().optional(),
   category: z.string().optional(),
   image: z.string().optional(),
-  visibility: z.enum(["public", "private"]),
+  visibility: z.enum(["public", "private", "restricted"]),
   assignedTo: z.array(z.string()).optional(),
   instructor: z.object({
     name: z.string().optional(),
@@ -512,8 +512,9 @@ export default function Courses() {
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
-                <SelectItem value="public">Public (all students)</SelectItem>
-                <SelectItem value="private">Private (selected students only)</SelectItem>
+                <SelectItem value="public">Public (All Students)</SelectItem>
+                <SelectItem value="private">Private (Selected Students Only)</SelectItem>
+                <SelectItem value="restricted">Restricted (Admins only)</SelectItem>
               </SelectContent>
             </Select>
             <FormMessage />
