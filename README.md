@@ -36,13 +36,9 @@ cd codegym
 
 2. Install dependencies:
 ```bash
-# Install server dependencies
-cd server
+# Install server and client directly in CodeGym folder dependencies
 npm install
 
-# Install client dependencies
-cd ../client
-npm install
 ```
 
 3. Set up environment variables:
@@ -51,12 +47,10 @@ npm install
 
 4. Start the development servers:
 ```bash
-# Start server (from server directory)
-npm run dev
-
-# Start client (from client directory)
+# Start server and Client (from Base directory)
 npm run dev
 ```
+5. Access the website from port designated in .env file i.e;5000
 
 ## Project Structure
 
