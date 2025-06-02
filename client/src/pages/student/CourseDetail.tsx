@@ -5,6 +5,7 @@ import StudentLayout from "@/components/layout/StudentLayout";
 import { Course, Class, Test, Assignment } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/providers/AuthProvider";
+import { format } from "date-fns";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -184,6 +185,23 @@ export default function CourseDetail() {
           <p className="text-gray-600 dark:text-gray-400 mb-6">
             The course you're looking for doesn't exist or you don't have access
             to it.
+          </p>
+          <Button asChild>
+            <a href="/student/courses">Back to Courses</a>
+          </Button>
+        </div>
+      </StudentLayout>
+    );
+  }
+
+  // Check if user is assigned to the course
+  if (!user?._id || !course.assignedTo?.includes(user._id)) {
+    return (
+      <StudentLayout>
+        <div className="text-center py-12">
+          <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
+            You are not assigned to this course. Please contact your instructor for access.
           </p>
           <Button asChild>
             <a href="/student/courses">Back to Courses</a>
@@ -541,11 +559,32 @@ export default function CourseDetail() {
                           <div className="flex flex-wrap gap-3 text-sm text-gray-500 dark:text-gray-400">
                             <span className="flex items-center">
                               <CalendarDays className="h-4 w-4 mr-1" />
-                              Due: {formatDate(assignment.dueDate)}
+                              Due :
+                              <span>
+                                {assignment.timeWindow?.endTime ? (
+                                  <>
+                                    {format(new Date(assignment.timeWindow.endTime), 'MMM dd, yyyy')}
+                                  </>
+                                ) : assignment.dueDate ? (
+                                  <>
+                                    {format(new Date(assignment.dueDate), 'MMM dd, yyyy')}
+                                  </>
+                                ) : 'No deadline'}
+                              </span>
                             </span>
                             <span className="flex items-center">
                               <Clock className="h-4 w-4 mr-1" />
-                              {getTimeLeft(assignment.dueDate)}
+                              <span>
+                                {assignment.timeWindow?.endTime ? (
+                                  <>
+                                    {getTimeLeft(assignment.timeWindow.endTime)}
+                                  </>
+                                ) : assignment.dueDate ? (
+                                  <>
+                                    {getTimeLeft(assignment.dueDate)}
+                                  </>
+                                ) : 'No deadline'}
+                              </span>
                             </span>
                           </div>
                         </div>
@@ -562,7 +601,9 @@ export default function CourseDetail() {
                           </span>
                         </Badge>
                         <Button asChild size="sm">
-                          <a href={`/student/assignments/${assignment._id}`}>
+                          <a href={assignment.status === "completed"
+                            ? `/student/assignments/${assignment._id}/results`
+                            : `/student/assignments/${assignment._id}`}>
                             {assignment.status === "completed"
                               ? "View Submission"
                               : "Start Assignment"}
